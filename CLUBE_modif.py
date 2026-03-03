@@ -14,12 +14,20 @@ import shutil
 import logging
 from time import sleep
 
+import urllib.request
+import urllib.error
+
 # ============================================================================
-# CONFIGURAÇÕES DE AMBIENTE (BUNDLED APP)
+# CONFIGURAÇÕES DE ATUALIZAÇÃO
 # ============================================================================
+CURRENT_VERSION = "1.0.0"
+GITHUB_REPO = "anjosdevpython/clube_altera_dados"
+
 if getattr(sys, 'frozen', False):
     # No PyInstaller 6+, arquivos extras podem estar em MEIPASS ou no _internal
     bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(sys.executable)))
+    # Pasta base onde fica o updater, version.txt e a pasta app
+    base_proj_dir = os.path.dirname(os.path.dirname(os.path.abspath(sys.executable)))
     posssiveis_caminhos = [
         os.path.join(bundle_dir, "pw-browsers"),
         os.path.join(bundle_dir, "_internal", "pw-browsers")
@@ -30,7 +38,16 @@ if getattr(sys, 'frozen', False):
             break
 else:
     # Em desenvolvimento, usa o caminho relativo local
+    base_proj_dir = os.path.dirname(os.path.abspath(__file__))
     os.environ['PLAYWRIGHT_BROWSERS_PATH'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pw-browsers")
+
+# Tentar ler versão real do version.txt se existir
+try:
+    v_path = os.path.join(base_proj_dir, "version.txt")
+    if os.path.exists(v_path):
+        with open(v_path, "r") as vf:
+            CURRENT_VERSION = vf.read().strip()
+except: pass
 
 # Configurar logging para erros
 caminho_pasta = os.path.join(os.path.expanduser('~'), "pydata")
@@ -343,7 +360,13 @@ class AlterarDadosClientesApp:
         self.style = ttk.Style("flatly")
         self.style.configure("TFrame", background="white")
         self.style.configure("TLabel", background="white")
-        self.style.configure("black.TButton", background="black", foreground="white", font=("Inter", 10, "bold"))
+        self.style.configure("black.TButton", 
+                      background="black", 
+                      foreground="white",
+                      font=("Inter", 10, "bold"))
+        
+        # Estilo para o botão de update
+        self.style.configure("update.TButton", font=("Inter", 8))
         
         self.var_senha = tk.BooleanVar()
         self.var_email = tk.BooleanVar()
@@ -351,11 +374,40 @@ class AlterarDadosClientesApp:
         
         self.build_ui()
     
+    def check_updates(self, manual=True):
+        """Verifica atualizações no GitHub"""
+        try:
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            with urllib.request.urlopen(url, timeout=5) as response:
+                release = json.loads(response.read().decode())
+                latest_version = release.get("tag_name", "").replace("v", "")
+                
+                if latest_version and latest_version != CURRENT_VERSION.replace("v", ""):
+                    if messagebox.askyesno("Atualização Disponível", f"Uma nova versão ({latest_version}) foi encontrada!\nDeseja atualizar agora?\n\nO programa será fechado para concluir a instalação."):
+                        # Caminho do updater (assume que está na pasta 'updater' conforme installer.iss)
+                        updater_exe = os.path.join(base_proj_dir, "updater", "clube_updater.exe")
+                        if os.path.exists(updater_exe):
+                            subprocess.Popen([updater_exe], cwd=os.path.dirname(updater_exe))
+                            self.root.destroy()
+                            sys.exit(0)
+                        else:
+                            messagebox.showerror("Erro", "O arquivo de atualização (clube_updater.exe) não foi encontrado.")
+                elif manual:
+                    messagebox.showinfo("Atualização", "Você já está utilizando a versão mais recente.")
+        except Exception as e:
+            if manual:
+                messagebox.showerror("Erro", f"Não foi possível verificar atualizações.\n{e}")
+
     def build_ui(self):
-        title = ttk.Label(self.root, text="VALIDAÇÃO DO FUNCIONÁRIO", font=("Inter", 16, "bold"), foreground="#DD1426")
+        # Container principal para permitir colocar o footer no fundo
+        main_container = ttk.Frame(self.root)
+        main_container.pack(fill="both", expand=True)
+
+        # Título principal
+        title = ttk.Label(main_container, text="VALIDAÇÃO DO FUNCIONÁRIO", font=("Inter", 16, "bold"), foreground="#DD1426")
         title.pack(pady=(20, 10))
         
-        login_frame = ttk.Frame(self.root)
+        login_frame = ttk.Frame(main_container)
         login_frame.pack(pady=10, fill="x", padx=20)
         
         ttk.Label(login_frame, text="CÓDIGO ZANTHUS", font=("Inter", 10, "bold")).grid(row=0, column=0, sticky='w', pady=(5, 0), columnspan=2)
@@ -366,10 +418,10 @@ class AlterarDadosClientesApp:
         self.senha_funcionario_entry = ttk.Entry(login_frame, width=72, show="*", bootstyle="dark")
         self.senha_funcionario_entry.grid(row=3, column=0, sticky='w', pady=(0, 15), columnspan=2)
         
-        title = ttk.Label(self.root, text="ALTERAR DADOS DOS CLIENTES", font=("Inter", 16, "bold"), foreground="#DD1426")
-        title.pack(pady=(20, 10))
+        title2 = ttk.Label(main_container, text="ALTERAR DADOS DOS CLIENTES", font=("Inter", 16, "bold"), foreground="#DD1426")
+        title2.pack(pady=(20, 10))
 
-        checkbox_frame = ttk.Frame(self.root)
+        checkbox_frame = ttk.Frame(main_container)
         checkbox_frame.pack(pady=10, fill="x", padx=40)
         
         self.senha_check = ttk.Checkbutton(checkbox_frame, text="SENHA", variable=self.var_senha, bootstyle="danger", command=lambda: self.update_checkbox("senha"))
@@ -381,7 +433,7 @@ class AlterarDadosClientesApp:
         self.senha_email_check = ttk.Checkbutton(checkbox_frame, text="SENHA E EMAIL", variable=self.var_senha_email, bootstyle="danger", command=lambda: self.update_checkbox("senha_email"))
         self.senha_email_check.grid(row=0, column=2, padx=35)
         
-        inputs_frame = ttk.Frame(self.root)
+        inputs_frame = ttk.Frame(main_container)
         inputs_frame.pack(pady=10, fill="x", padx=20)
         
         ttk.Label(inputs_frame, text="DIGITE O CPF DO CLIENTE", font=("Inter", 10, "bold")).grid(row=0, column=0, sticky='w', pady=(5, 0), columnspan=2)
@@ -396,8 +448,22 @@ class AlterarDadosClientesApp:
         self.senha_entry = ttk.Entry(inputs_frame, width=72, show="*", bootstyle="dark")
         self.senha_entry.grid(row=5, column=0, sticky='w', pady=(0, 10), columnspan=2)
         
-        iniciar_btn = ttk.Button(self.root, text="INICIAR", style="black.TButton", command=self.iniciar)
+        iniciar_btn = ttk.Button(main_container, text="INICIAR", style="black.TButton", command=self.iniciar)
         iniciar_btn.pack(pady=20, fill="x", padx=20)
+
+        # Footer com Versão e Botão de Update
+        footer = ttk.Frame(self.root, bootstyle="light")
+        footer.pack(side="bottom", fill="x")
+        
+        version_label = ttk.Label(footer, text=f"Versão: {CURRENT_VERSION}", font=("Inter", 8), bootstyle="secondary")
+        version_label.pack(side="left", padx=10, pady=5)
+        
+        update_btn = ttk.Button(footer, text="VERIFICAR ATUALIZAÇÃO", style="update.TButton", 
+                                bootstyle="link", command=self.check_updates)
+        update_btn.pack(side="right", padx=10, pady=5)
+        
+        # Verificar atualização silenciosamente ao abrir
+        self.root.after(2000, lambda: self.check_updates(manual=False))
 
     def update_checkbox(self, selected):
         global change_password, change_email, change_all

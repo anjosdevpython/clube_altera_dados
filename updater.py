@@ -77,13 +77,17 @@ def main():
     
     release = get_latest_github_release()
     if not release:
-        run_app()
+        print("Nenhuma release encontrada.")
+        time.sleep(2)
+        return
 
     latest_version = release.get("tag_name") 
     if current_version == latest_version:
-        run_app()
+        print("Voce ja esta na versao mais recente.")
+        time.sleep(2)
+        return
         
-    print(f"Atualizacao encontrada. Saltando para {latest_version}...")
+    print(f"Atualizacao encontrada. Iniciando processo para {latest_version}...")
     
     zip_url, sha256_url = None, None
     for asset in release.get("assets", []):
@@ -93,7 +97,9 @@ def main():
             sha256_url = asset["url"] if IS_PRIVATE else asset["browser_download_url"]
             
     if not zip_url or not sha256_url:
-        run_app()
+        print("Assets de atualizacao nao encontrados.")
+        time.sleep(2)
+        return
 
     temp_zip = os.path.join(BASE_DIR, "update.zip")
     temp_sha256 = os.path.join(BASE_DIR, "update.sha256")
@@ -105,14 +111,17 @@ def main():
         with open(temp_sha256, "r", encoding="utf-8") as f:
             expected_hash = f.read().strip().split()[0]
             
-        print("Verificando SHA-256...")
+        print("Verificando integridade...")
         if not verify_sha256(temp_zip, expected_hash):
-            run_app()
+            print("Erro de verificacao SHA256.")
+            time.sleep(3)
+            return
 
+        print("Fechando aplicativo para atualizar...")
         os.system(f"taskkill /F /IM \"{APP_EXE_NAME}\" >nul 2>&1")
-        time.sleep(1.5)
+        time.sleep(2)
         
-        print("Instalando nova versao...")
+        print("Substituindo arquivos...")
         if os.path.exists(APP_DIR):
             shutil.rmtree(APP_DIR, ignore_errors=True)
         os.makedirs(APP_DIR, exist_ok=True)
@@ -123,13 +132,16 @@ def main():
         with open(VERSION_FILE, "w", encoding="utf-8") as f:
             f.write(latest_version)
             
+        print("Atualizacao concluida com sucesso!")
+        time.sleep(1)
+        run_app()
+            
     except Exception as e:
         print(f"Erro processando atualizacao: {e}")
+        time.sleep(5)
     finally:
         if os.path.exists(temp_zip): os.remove(temp_zip)
         if os.path.exists(temp_sha256): os.remove(temp_sha256)
-        
-    run_app()
 
 if __name__ == "__main__":
     main()
