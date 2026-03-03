@@ -1,0 +1,5 @@
+Google chrome instalado
+
+ttkbootstrap
+selenium
+webdriver-manager
