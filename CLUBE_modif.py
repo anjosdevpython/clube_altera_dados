@@ -14,6 +14,24 @@ import shutil
 import logging
 from time import sleep
 
+# ============================================================================
+# CONFIGURAÇÕES DE AMBIENTE (BUNDLED APP)
+# ============================================================================
+if getattr(sys, 'frozen', False):
+    # No PyInstaller 6+, arquivos extras podem estar em MEIPASS ou no _internal
+    bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(sys.executable)))
+    posssiveis_caminhos = [
+        os.path.join(bundle_dir, "pw-browsers"),
+        os.path.join(bundle_dir, "_internal", "pw-browsers")
+    ]
+    for caminho in posssiveis_caminhos:
+        if os.path.exists(caminho):
+            os.environ['PLAYWRIGHT_BROWSERS_PATH'] = caminho
+            break
+else:
+    # Em desenvolvimento, usa o caminho relativo local
+    os.environ['PLAYWRIGHT_BROWSERS_PATH'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pw-browsers")
+
 # Configurar logging para erros
 caminho_pasta = os.path.join(os.path.expanduser('~'), "pydata")
 os.makedirs(caminho_pasta, exist_ok=True)
@@ -278,7 +296,7 @@ def clientes_page():
         
         # Espera a mensagem de OK e clica
         page.wait_for_selector("#lnkMensagemOK", timeout=15000)
-        page.locator("#lnkMensagemOK").click()
+        page.locator("#lnkMensagemOK").first.click()
         
         finalizar_playwright()
     except Exception as e:
