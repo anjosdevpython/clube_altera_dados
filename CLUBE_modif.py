@@ -99,9 +99,9 @@ page = None
 # Callback para atualização da UI em tempo real
 log_callback = None
 
-def report_log(msg, tipo="info"):
+def report_log(msg, tipo="info", screenshot_path=None):
     if log_callback:
-        log_callback(msg, tipo)
+        log_callback(msg, tipo, screenshot_path)
     else:
         print(f"[{tipo}] {msg}")
 
@@ -958,8 +958,8 @@ class AlterarDadosClientesApp:
         except Exception as e:
             messagebox.showerror("Erro", f"Não foi possível exportar o log:\n{e}")
 
-    def adicionar_log(self, mensagem, tipo="info"):
-        """Adiciona uma mensagem formatada ao log e salva automaticamente no arquivo persistente"""
+    def adicionar_log(self, mensagem, tipo="info", screenshot_path=None):
+        """Adiciona mensagem formatada ao log e salva no arquivo persistente."""
         def _add():
             self.log_text.config(state="normal")
             agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -967,22 +967,27 @@ class AlterarDadosClientesApp:
                 cpf_txt = self.cpf_entry.get().strip() or "N/A"
             except:
                 cpf_txt = "N/A"
-                
+
             linha = f"{agora} - {mensagem} - {cpf_txt}"
-            prefixo = "✅" if tipo == "sucesso" else "❌" if tipo == "erro" else "🔹"
-            
-            self.log_text.insert(tk.END, f"{prefixo} {linha}\n", tipo)
-            
-            # Salva em arquivo persistente na pasta logs do programa
+            prefixo_icone = "✅" if tipo == "sucesso" else "❌" if tipo == "erro" else "🔹"
+
+            self.log_text.insert(tk.END, f"{prefixo_icone} {linha}\n", tipo)
+
             try:
                 log_file = os.path.join(caminho_logs, "automacoes.log")
                 with open(log_file, "a", encoding="utf-8") as f:
                     f.write(f"{linha}\n")
-            except: pass
-                
+            except:
+                pass
+
             self.log_text.see(tk.END)
             self.log_text.config(state="disabled")
             self.root.update_idletasks()
+
+            # Mostrar botao de screenshots se houve screenshot nesta mensagem de erro
+            if screenshot_path and tipo == "erro":
+                self.mostrar_btn_screenshots()
+
         self.root.after(0, _add)
 
     def mostrar_btn_screenshots(self):
