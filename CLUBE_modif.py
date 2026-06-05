@@ -1042,6 +1042,9 @@ class AlterarDadosClientesApp:
         self.iniciar_btn.config(state="disabled")
         self.progressbar.pack(fill="x", padx=20, pady=(0, 10))
         self.progressbar.start(10)
+        if self.log_text.get("1.0", "end-1c").strip():
+            agora = datetime.now().strftime("%H:%M:%S")
+            self.adicionar_log(f"────────────────── Nova tentativa — {agora} ──────────────────")
         self.adicionar_log("Iniciando processo em segundo plano...")
         thread = threading.Thread(target=self.run_in_thread, daemon=True)
         thread.start()
@@ -1081,6 +1084,7 @@ class AlterarDadosClientesApp:
                 else:
                     self.adicionar_log("Falha no Login Zanthus: Usuário ou Senha incorretos.", "erro")
                     messagebox.showerror("Erro de Login", "Código ou Senha Zanthus estão incorretos.\n\n💡 SOLUÇÃO: Verifique os dados digitados.")
+                    self.mostrar_btn_tentar_novamente()
                     return
             except Exception as err_zanthus: 
                 zanthus_confirmação = []
@@ -1092,6 +1096,7 @@ class AlterarDadosClientesApp:
                     "💡 SOLUÇÃO:\n"
                     "1. Verifique se seu Código e Senha Zanthus estão corretos.\n"
                     "2. Verifique se o site do Bluesoft/Zanthus está fora do ar no navegador.")
+                self.mostrar_btn_tentar_novamente()
                 return
 
         if len(zanthus_confirmação)>0:
@@ -1108,6 +1113,7 @@ class AlterarDadosClientesApp:
                                     f"Não foi possível alterar a senha.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
                                     "💡 SOLUÇÃO: Verifique se o CPF do cliente existe no CRM e se você tem permissão para editar.")
+                                self.mostrar_btn_tentar_novamente()
                             else:
                                 tipo_alterado = "SENHA"
                                 self.adicionar_log(f"✅ {tipo_alterado} alterado com sucesso para CPF {cpf}.", "sucesso")
@@ -1128,6 +1134,7 @@ class AlterarDadosClientesApp:
                                     f"Não foi possível alterar o email.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
                                     "💡 SOLUÇÃO: Verifique sua conexão e se o CPF está correto no CRM.")
+                                self.mostrar_btn_tentar_novamente()
                             else:
                                 tipo_alterado = "EMAIL"
                                 self.adicionar_log(f"✅ {tipo_alterado} alterado com sucesso para CPF {cpf}.", "sucesso")
@@ -1148,6 +1155,7 @@ class AlterarDadosClientesApp:
                                     f"Não foi possível alterar os dados.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
                                     "💡 SOLUÇÃO: Reinicie o programa e tente novamente.")
+                                self.mostrar_btn_tentar_novamente()
                             else:
                                 tipo_alterado = "SENHA E EMAIL"
                                 self.adicionar_log(f"✅ {tipo_alterado} alterados com sucesso para CPF {cpf}.", "sucesso")
