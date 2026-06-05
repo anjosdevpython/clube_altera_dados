@@ -124,6 +124,99 @@ def tirar_screenshot_erro(prefixo: str = "erro") -> str | None:
         logging.warning(f"Screenshot falhou (nao critica): {exc_screenshot}")
         return None
 
+# ============================================================================
+# SELECTORS — Seletores com fallback para resistir a mudancas no HTML do CRM
+# Estrutura: { "chave": ["seletor_primario", "fallback_1", "fallback_2"] }
+# ============================================================================
+SELECTORS = {
+    # Zanthus
+    "zanthus_usuario":      ["#USUARIO",         "input[name='USUARIO']",         "input[name='usuario']"],
+    "zanthus_senha":        ["#SENHA",            "input[name='SENHA']",           "input[name='senha']"],
+    "zanthus_submit":       ['//input[@type="submit" and @value=" Entrar "]', 'input[type="submit"]', 'button[type="submit"]'],
+    "zanthus_menu":         ["#Menu",             ".menu-principal",               "[id*='Menu']"],
+    # CRM (Bnex)
+    "crm_usuario":          ["#Usuario",          "input[name='Usuario']",         "input[name='usuario']"],
+    "crm_senha_login":      ["#Senha",            "input[name='Senha']",           "input[name='senha']"],
+    "crm_btn_entrar":       ["#btnEntrar",        "button[type='submit']",         "input[type='submit']"],
+    "crm_cpf_campo":        ["#cpfcliente",       "input[name='cpfcliente']",      "input[placeholder*='CPF']"],
+    "crm_btn_editar":       ["#btnEditar",        ".btn-editar",                   "button:has-text('Editar')"],
+    "crm_nome":             ["#Nome",             "input[name='Nome']",            "input[id*='Nome']"],
+    "crm_email":            ["#Email",            "input[name='Email']",           "input[type='email']"],
+    "crm_confirmar_email":  ["#ConfirmarEmail",   "input[name='ConfirmarEmail']",  "input[placeholder*='onfirm']"],
+    "crm_nova_senha":       ["#Senha",            "input[name='Senha']",           "input[type='password']"],
+    "crm_confirmar_senha":  ["#ConfirmarSenha",   "input[name='ConfirmarSenha']",  "input[placeholder*='onfirm']"],
+    "crm_btn_salvar":       ["#btnSalvar",        "button:has-text('Salvar')",     "input[value='Salvar']"],
+    "crm_msg_ok":           ["#lnkMensagemOK",    ".mensagem-ok",                  "[id*='MensagemOK']"],
+}
+
+
+def tentar_seletores(page_obj, chave: str, acao: str, step: str = "", **kwargs):
+    """
+    Tenta cada seletor em SELECTORS[chave] em ordem sequencial.
+
+    Parametros:
+        page_obj: instancia de Page do Playwright (passa page global ou parametro).
+        chave: chave em SELECTORS (ex: "crm_cpf_campo").
+        acao: 'fill' | 'click' | 'wait' | 'locator'.
+        step: nome da etapa para mensagens de erro (ex: "busca_cpf").
+        kwargs:
+            valor (str)    — para acao='fill'
+            timeout (int)  — milissegundos, default 10000 para 'wait', 5000 para outros
+
+    Retorna:
+        None para 'fill', 'click', 'wait'.
+        Locator para 'locator'.
+
+    Levanta:
+        PlaywrightError com mensagem descritiva se todos os seletores falharem.
+    """
+    seletores = SELECTORS.get(chave, [])
+    if not seletores:
+        raise ValueError(f"Chave '{chave}' nao encontrada em SELECTORS")
+
+    erros = []
+    for i, sel in enumerate(seletores):
+        try:
+            if acao == "fill":
+                valor = kwargs.get("valor", "")
+                timeout = kwargs.get("timeout", 5000)
+                page_obj.locator(sel).fill(valor, timeout=timeout)
+                if i > 0:
+                    report_log(f"[SELETOR] '{chave}' usou fallback #{i}: {sel}", "info")
+                return None
+
+            elif acao == "click":
+                timeout = kwargs.get("timeout", 5000)
+                page_obj.locator(sel).click(timeout=timeout)
+                if i > 0:
+                    report_log(f"[SELETOR] '{chave}' usou fallback #{i}: {sel}", "info")
+                return None
+
+            elif acao == "wait":
+                timeout = kwargs.get("timeout", 10000)
+                page_obj.wait_for_selector(sel, timeout=timeout)
+                if i > 0:
+                    report_log(f"[SELETOR] '{chave}' usou fallback #{i}: {sel}", "info")
+                return None
+
+            elif acao == "locator":
+                loc = page_obj.locator(sel)
+                loc.wait_for(state="attached", timeout=kwargs.get("timeout", 5000))
+                if i > 0:
+                    report_log(f"[SELETOR] '{chave}' usou fallback #{i}: {sel}", "info")
+                return loc
+
+        except (PlaywrightTimeoutError, PlaywrightError) as exc_sel:
+            erros.append(f"  [{i}] '{sel}': {exc_sel.message[:100]}")
+            continue
+
+    msg = (
+        f"Nenhum seletor funcionou para '{chave}' (etapa: {step}).\n"
+        + "\n".join(erros)
+    )
+    raise PlaywrightError(msg)
+
+
 def change():
     global change_all, change_email, change_password
     if change_all == True:
