@@ -935,6 +935,8 @@ class AlterarDadosClientesApp:
         change_email = False
         change_all = False
         zanthus_confirmação = []
+        if hasattr(self, '_btn_tentar_novamente') and self._btn_tentar_novamente.winfo_exists():
+            self._btn_tentar_novamente.pack_forget()
 
     def exportar_log(self):
         """Salva o conteúdo do log em um arquivo TXT"""
@@ -1012,6 +1014,24 @@ class AlterarDadosClientesApp:
             )
         )
         self._btn_screenshots.pack(pady=(2, 5), padx=20, fill="x")
+
+    def mostrar_btn_tentar_novamente(self):
+        def _show():
+            if hasattr(self, '_btn_tentar_novamente') and self._btn_tentar_novamente.winfo_exists():
+                return
+            self._btn_tentar_novamente = ttk.Button(
+                self.root,
+                text="🔄 Tentar novamente",
+                bootstyle="warning",
+                command=self._tentar_novamente_click
+            )
+            self._btn_tentar_novamente.pack(pady=(2, 5), padx=20, fill="x")
+        self.root.after(0, _show)
+
+    def _tentar_novamente_click(self):
+        if hasattr(self, '_btn_tentar_novamente') and self._btn_tentar_novamente.winfo_exists():
+            self._btn_tentar_novamente.pack_forget()
+        self.start_thread()
 
     def fechar_progressbar(self):
         self.progressbar.stop()
