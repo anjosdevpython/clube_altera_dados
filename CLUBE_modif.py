@@ -549,28 +549,30 @@ def _carregar_crm_config():
     )
 
 def loguin_function():
-    import traceback
+    import traceback as _tb
     try:
         crm_usuario, crm_senha = _carregar_crm_config()
         funcionais()
-        report_log("Acessando CRM Mini Preço (Bnex)...")
+        report_log("Acessando CRM Mini Preco (Bnex)...")
         page.goto('https://crm.grupominipreco.com.br')
-        page.wait_for_selector("#Usuario", timeout=15000)
+
+        tentar_seletores(page, "crm_usuario",     "wait", step="login_crm", timeout=15000)
         report_log("Realizando login no CRM...")
-        page.locator("#Usuario").fill(crm_usuario)
-        page.locator("#Senha").fill(crm_senha)
-        page.locator("#btnEntrar").click()
-        
-        # Espera carregar a página inicial
+        tentar_seletores(page, "crm_usuario",     "fill", step="login_crm", valor=crm_usuario)
+        tentar_seletores(page, "crm_senha_login", "fill", step="login_crm", valor=crm_senha)
+        tentar_seletores(page, "crm_btn_entrar",  "click", step="login_crm")
+
         page.wait_for_load_state("networkidle")
-        
-        report_log("Navegando para página de Clientes...")
-        # Vai para a página de clientes
+
+        report_log("Navegando para pagina de Clientes...")
         page.goto('https://crm.grupominipreco.com.br/Cliente/')
-        page.wait_for_selector("#cpfcliente", timeout=30000)
+        tentar_seletores(page, "crm_cpf_campo", "wait", step="login_crm", timeout=30000)
     except Exception as e:
+        caminho = tirar_screenshot_erro(prefixo="[step=login_crm]_erro")
+        if caminho:
+            report_log(f"Screenshot salvo: {caminho}", "info")
         finalizar_playwright()
-        raise Exception(f"ERRO no login do CRM: {str(e)}\n{traceback.format_exc()}")
+        raise Exception(f"[step=login_crm] ERRO no login do CRM: {str(e)}\n{_tb.format_exc()}")
 
 def clientes_page():
     global cpf, email, senha
