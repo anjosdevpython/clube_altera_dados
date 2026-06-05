@@ -1068,17 +1068,18 @@ class AlterarDadosClientesApp:
                 case 11:
                     if change_password:
                         if len(senha)>=4 and senha.isdigit():
-                            try: 
+                            try:
                                 self.adicionar_log(f"Iniciando alteração de SENHA para CPF {cpf}...")
-                                main_function()
-                            except Exception as err: 
+                                executar_com_retry(main_function)
+                            except Exception as err:
                                 self.adicionar_log(f"Erro no CRM: {err}", "erro")
-                                messagebox.showerror("Operação Falhou", 
+                                messagebox.showerror("Operação Falhou",
                                     f"Não foi possível alterar a senha.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
                                     "💡 SOLUÇÃO: Verifique se o CPF do cliente existe no CRM e se você tem permissão para editar.")
                             else:
-                                self.adicionar_log(f"SENHA alterada com sucesso para {cpf}!", "sucesso")
+                                tipo_alterado = "SENHA"
+                                self.adicionar_log(f"✅ {tipo_alterado} alterado com sucesso para CPF {cpf}.", "sucesso")
                                 messagebox.showinfo("Sucesso", f"Senha alterada com sucesso!\n\nCPF: {cpf}\nNova Senha: {senha}")
                                 self.reset_values()
                         else: 
@@ -1087,17 +1088,18 @@ class AlterarDadosClientesApp:
                                 "💡 SOLUÇÃO: Digite apenas números no campo de senha.")
                     elif change_email:
                         if len(email)>5 and "@" in email and "." in email:
-                            try: 
+                            try:
                                 self.adicionar_log(f"Iniciando alteração de EMAIL para CPF {cpf}...")
-                                main_function()
-                            except Exception as err: 
+                                executar_com_retry(main_function)
+                            except Exception as err:
                                 self.adicionar_log(f"Erro no CRM: {err}", "erro")
-                                messagebox.showerror("Operação Falhou", 
+                                messagebox.showerror("Operação Falhou",
                                     f"Não foi possível alterar o email.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
                                     "💡 SOLUÇÃO: Verifique sua conexão e se o CPF está correto no CRM.")
                             else:
-                                self.adicionar_log(f"EMAIL alterado com sucesso para {cpf}!", "sucesso")
+                                tipo_alterado = "EMAIL"
+                                self.adicionar_log(f"✅ {tipo_alterado} alterado com sucesso para CPF {cpf}.", "sucesso")
                                 messagebox.showinfo("Sucesso", f"Email alterado com sucesso!\n\nCPF: {cpf}\nNovo Email: {email}")
                                 self.reset_values()
                         else: 
@@ -1106,17 +1108,18 @@ class AlterarDadosClientesApp:
                                 "💡 SOLUÇÃO: Use o formato: nome@dominio.com")
                     elif change_all:
                         if len(senha)>=4 and senha.isdigit() and len(email)>5 and "@" in email and "." in email:
-                            try: 
+                            try:
                                 self.adicionar_log(f"Iniciando alteração de SENHA E EMAIL para CPF {cpf}...")
-                                main_function()
-                            except Exception as err: 
+                                executar_com_retry(main_function)
+                            except Exception as err:
                                 self.adicionar_log(f"Erro no CRM: {err}", "erro")
-                                messagebox.showerror("Operação Falhou", 
+                                messagebox.showerror("Operação Falhou",
                                     f"Não foi possível alterar os dados.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
                                     "💡 SOLUÇÃO: Reinicie o programa e tente novamente.")
                             else:
-                                self.adicionar_log(f"DADOS (Senha/Email) alterados com sucesso para {cpf}!", "sucesso")
+                                tipo_alterado = "SENHA E EMAIL"
+                                self.adicionar_log(f"✅ {tipo_alterado} alterados com sucesso para CPF {cpf}.", "sucesso")
                                 messagebox.showinfo("Sucesso", f"Senha e Email alterados!\n\nCPF: {cpf}")
                                 self.reset_values()
                         else: 
