@@ -105,6 +105,25 @@ def report_log(msg, tipo="info"):
     else:
         print(f"[{tipo}] {msg}")
 
+def tirar_screenshot_erro(prefixo: str = "erro") -> str | None:
+    """
+    Captura screenshot da pagina atual e salva em caminho_screenshots.
+    Deve ser chamada ANTES de finalizar_playwright().
+    Retorna o caminho do arquivo salvo, ou None se falhar.
+    """
+    global page
+    if page is None:
+        return None
+    try:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{prefixo}_{ts}.png"
+        filepath = os.path.join(caminho_screenshots, filename)
+        page.screenshot(path=filepath, full_page=True)
+        return filepath
+    except Exception as exc_screenshot:
+        logging.warning(f"Screenshot falhou (nao critica): {exc_screenshot}")
+        return None
+
 def change():
     global change_all, change_email, change_password
     if change_all == True:
