@@ -1,27 +1,32 @@
+; Inno Setup Script para o Clube Altera Dados
 [Setup]
-AppName=ClubeAlteraDados
-AppVersion=1.0.0
-DefaultDirName={commonappdata}\ClubeAlteraDados
-DefaultGroupName=ClubeAlteraDados
-OutputDir=.\
-OutputBaseFilename=Setup_ClubeAlteraDados
+AppName=Clube Altera Dados
+AppVersion=1.0.12
+DefaultDirName={pf}\ClubeAlteraDados
+DefaultGroupName=Clube Altera Dados
+OutputBaseFilename=Instalador_Clube
 Compression=lzma
 SolidCompression=yes
-PrivilegesRequired=admin 
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
+PrivilegesRequired=admin
+SetupIconFile=clube_icon.ico
 
-[Dirs]
-Name: "{app}"; Permissions: users-modify
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; O Updater agora é um arquivo único
-Source: "dist\clube_updater.exe"; DestDir: "{app}\updater"; Flags: ignoreversion
-; O App Principal permanece em pasta
+; Programa Principal (Na subpasta app)
 Source: "dist\CLUBE_modif\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Atualizador (Na subpasta updater)
+Source: "dist\clube_updater.exe"; DestDir: "{app}\updater"; Flags: ignoreversion
+; Arquivo de Versão (Na raiz da instalação)
 Source: "version.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "clube_icon.ico"; DestDir: "{app}\app"; Flags: ignoreversion
 
 [Icons]
-Name: "{commondesktop}\Clube Altera Dados"; Filename: "{app}\updater\clube_updater.exe"; Parameters: ""; IconFilename: "{app}\app\CLUBE_modif.exe"
-Name: "{group}\Clube Altera Dados"; Filename: "{app}\updater\clube_updater.exe"; Parameters: ""; IconFilename: "{app}\app\CLUBE_modif.exe"
+Name: "{group}\Clube Altera Dados"; Filename: "{app}\app\CLUBE_modif.exe"; IconFilename: "{app}\app\clube_icon.ico"
+Name: "{commondesktop}\Clube Altera Dados"; Filename: "{app}\app\CLUBE_modif.exe"; Tasks: desktopicon; IconFilename: "{app}\app\clube_icon.ico"
 
 [Run]
-Filename: "{app}\updater\clube_updater.exe"; Description: "Lançar Clube Altera Dados Agora"; Flags: nowait postinstall
+Filename: "{app}\app\CLUBE_modif.exe"; Description: "{cm:LaunchProgram,Clube Altera Dados}"; Flags: nowait postinstall skipifsilent
