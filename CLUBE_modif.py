@@ -751,6 +751,25 @@ class AlterarDadosClientesApp:
             self.root.update_idletasks()
         self.root.after(0, _add)
 
+    def mostrar_btn_screenshots(self):
+        """
+        Exibe botao 'Abrir pasta de screenshots' abaixo do log.
+        Thread-safe: deve ser chamado via root.after(0, ...).
+        Nao duplica o botao se ja estiver visivel.
+        """
+        if hasattr(self, '_btn_screenshots') and self._btn_screenshots.winfo_exists():
+            return
+        self._btn_screenshots = ttk.Button(
+            self.root,
+            text="Abrir pasta de screenshots",
+            bootstyle="warning-outline",
+            command=lambda: subprocess.Popen(
+                f'explorer "{caminho_screenshots}"',
+                shell=True
+            )
+        )
+        self._btn_screenshots.pack(pady=(2, 5), padx=20, fill="x")
+
     def fechar_progressbar(self):
         self.progressbar.stop()
         self.progressbar.pack_forget()
