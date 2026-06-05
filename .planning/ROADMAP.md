@@ -8,7 +8,7 @@
 
 | # | Fase | Meta | Requisitos | Critérios de Sucesso |
 |---|------|------|------------|----------------------|
-| 1 | Robustez da Automação | Playwright não falha silenciosamente | ROB-01, ROB-02, ROB-03, ROB-04 | 4 |
+| 1 | Robustez da Automação ✓ | Playwright não falha silenciosamente | ROB-01, ROB-02, ROB-03, ROB-04 | 4/4 ✓ (UAT pendente) |
 | 2 | UX Operacional | Operador nunca fica perdido | UX-01, UX-02 | 3 |
 | 3 | Auditoria Centralizada | Supervisores têm visibilidade das operações | LOG-01 | 3 |
 
