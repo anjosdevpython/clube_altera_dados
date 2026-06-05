@@ -8,14 +8,20 @@
 
 - [x] Project initialized (GSD)
 - [x] Security fixes applied (crm_config.json, github_token.txt externalized)
-- [x] Phase 1: Robustez da Automação — **PLANNED** ✓
+- [x] Phase 1: Robustez da Automação — **COMPLETED** ✓ (11/11 tasks, 2026-06-05)
 - [ ] Phase 2: UX Operacional — not started
 - [ ] Phase 3: Auditoria Centralizada — not started
 
 ## Last Action
 
-2025-06-05 — Phase 1 planejada. RESEARCH.md e PLAN.md criados e verificados (PASS).
-Descoberta crítica: `NavigationError` não existe no Playwright — erros de rede são `Error` com `"net::ERR"` na mensagem.
+2026-06-05 — Phase 1 executada. 11/11 tasks implementadas em CLUBE_modif.py. Commits: T-01 2779d2c → T-11 bd37bbd. SUMMARY criado em 6d9f961.
+
+## Decisions Made
+
+- D-05: screenshot ANTES de finalizar_playwright() em todos os excepts
+- D-08: CPF nao encontrado = permanente (step='busca_cpf' + PlaywrightTimeoutError)
+- D-09: 3 tentativas, 2s backoff em executar_com_retry()
+- D-14/15: SELECTORS hardcoded, 16 chaves, 3 seletores cada
 
 ## Phase 1 Plan Summary
 
