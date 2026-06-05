@@ -280,6 +280,70 @@ def classificar_erro(e: Exception, step: str = "") -> tuple:
     )
 
 
+def executar_com_retry(funcao_automacao, max_tentativas: int = 3, backoff_s: float = 2.0):
+    """
+    Executa funcao_automacao() com retry automatico para erros transientes.
+
+    funcao_automacao: callable sem argumentos. Use lambda se precisar passar args.
+    max_tentativas: numero maximo de tentativas (default 3, conforme D-09).
+    backoff_s: segundos de espera entre tentativas (default 2, conforme D-09).
+
+    Em caso de erro permanente (classificar_erro retorna eh_permanente=True),
+    reporta e relanca imediatamente sem tentar novamente.
+
+    Em caso de erro transiente, aguarda backoff_s e tenta novamente.
+    Apos max_tentativas falhas, reporta e relanca o ultimo erro.
+    """
+    import time
+    import traceback
+
+    ultimo_erro = None
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            funcao_automacao()
+            return  # sucesso — encerra o loop
+        except Exception as e:
+            ultimo_erro = e
+            logging.error(
+                f"Tentativa {tentativa}/{max_tentativas} falhou:\n{traceback.format_exc()}"
+            )
+            # Determinar step a partir da mensagem de excecao (melhor esforco)
+            step = _extrair_step_da_excecao(e)
+            msg_ui, eh_permanente = classificar_erro(e, step=step)
+
+            if eh_permanente:
+                report_log(f"Erro permanente: {msg_ui}", "erro")
+                raise
+
+            if tentativa < max_tentativas:
+                report_log(
+                    f"Tentativa {tentativa}/{max_tentativas} falhou: {msg_ui} "
+                    f"Aguardando {int(backoff_s)}s antes de tentar novamente...",
+                    "erro",
+                )
+                time.sleep(backoff_s)
+            else:
+                report_log(
+                    f"Todas as {max_tentativas} tentativas falharam. Ultimo erro: {msg_ui}",
+                    "erro",
+                )
+
+    raise ultimo_erro
+
+
+def _extrair_step_da_excecao(e: Exception) -> str:
+    """
+    Extrai o nome da etapa a partir da mensagem da excecao (convencao interna).
+    As funcoes de automacao incluem o step no texto da excecao quando re-raise.
+    Retorna string vazia se nao conseguir extrair.
+    """
+    msg = str(e)
+    # Convencao: excecoes re-lançadas incluem "[step=<nome>]" no inicio
+    import re
+    match = re.search(r'\[step=([^\]]+)\]', msg)
+    return match.group(1) if match else ""
+
+
 def change():
     global change_all, change_email, change_password
     if change_all == True:
