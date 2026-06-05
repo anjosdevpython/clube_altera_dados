@@ -361,28 +361,28 @@ def loguin_function_Zanthus():
     try:
         funcionais()
         page.goto('https://minipreco.zanthus.bluesoft.com.br')
-        
-        # Preencher login e senha
+
         report_log(f"Portal Zanthus carregado. Logando como {login_funcionario}...")
-        page.locator("#USUARIO").fill(login_funcionario)
-        page.locator("#SENHA").fill(senha_funcionario)
-        
-        report_log("Enviando formulário de login Zanthus...")
-        page.locator('//input[@type="submit" and @value=" Entrar "]').click()
-        
-        # Aguarda pela presença do Menu para confirmar login
+        tentar_seletores(page, "zanthus_usuario", "fill", step="login_zanthus", valor=login_funcionario)
+        tentar_seletores(page, "zanthus_senha",   "fill", step="login_zanthus", valor=senha_funcionario)
+
+        report_log("Enviando formulario de login Zanthus...")
+        tentar_seletores(page, "zanthus_submit", "click", step="login_zanthus")
+
         try:
-            # Espera até 10 segundos
-            page.wait_for_selector("#Menu", timeout=10000)
+            tentar_seletores(page, "zanthus_menu", "wait", step="login_zanthus", timeout=10000)
             zanthus_confirmação = ['yes']
-        except:
+        except (PlaywrightTimeoutError, PlaywrightError):
             zanthus_confirmação = []
-            
+
         finalizar_playwright()
     except Exception as e:
+        caminho = tirar_screenshot_erro(prefixo=f"[step=login_zanthus]_erro")
+        if caminho:
+            report_log(f"Screenshot salvo: {caminho}", "info")
         finalizar_playwright()
-        import traceback
-        raise Exception(f"ERRO na função loguin_function_Zanthus(): {str(e)}\n{traceback.format_exc()}")
+        import traceback as _tb
+        raise Exception(f"[step=login_zanthus] ERRO na funcao loguin_function_Zanthus(): {str(e)}\n{_tb.format_exc()}")
 
 def funcionais():
     global playwright_instance, browser, context, page
