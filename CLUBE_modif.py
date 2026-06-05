@@ -563,6 +563,7 @@ def loguin_function():
         tentar_seletores(page, "crm_btn_entrar",  "click", step="login_crm")
 
         page.wait_for_load_state("networkidle")
+        report_log("✓ Login CRM realizado", "sucesso")
 
         report_log("Navegando para pagina de Clientes...")
         page.goto('https://crm.grupominipreco.com.br/Cliente/')
@@ -585,6 +586,7 @@ def clientes_page():
         # CRITICO: timeout aqui = CPF nao encontrado (permanente).
         # classificar_erro detecta step="busca_cpf" + PlaywrightTimeoutError como permanente.
         tentar_seletores(page, "crm_btn_editar", "wait", step="busca_cpf", timeout=30000)
+        report_log(f"✓ CPF {cpf} encontrado", "sucesso")
         report_log("Cliente encontrado. Abrindo edicao...")
         tentar_seletores(page, "crm_btn_editar", "click", step="busca_cpf")
 
@@ -594,6 +596,7 @@ def clientes_page():
 
         report_log("Enviando alteracoes no CRM...")
         tentar_seletores(page, "crm_btn_salvar", "click", step="salvar")
+        report_log("✓ Dados salvos", "sucesso")
 
         report_log("Aguardando confirmacao de sucesso...")
         # lnkMensagemOK pode ter multiplas instancias — filtra o visivel
@@ -603,6 +606,7 @@ def clientes_page():
             try:
                 page.locator(sel).filter(visible=True).first.click(timeout=15000)
                 clicou_ok = True
+                report_log("✓ Operação confirmada pelo CRM", "sucesso")
                 break
             except (PlaywrightTimeoutError, PlaywrightError):
                 continue
@@ -1045,6 +1049,7 @@ class AlterarDadosClientesApp:
         if senha_salva and senha_salva == senha_funcionario:
             zanthus_confirmação = ['yes']
             self.adicionar_log("Login Zanthus carregado (Cache).")
+            self.adicionar_log("✓ Zanthus validado", "sucesso")
         else:
             try:
                 self.adicionar_log("Validando credentials no Zanthus...")
@@ -1052,6 +1057,7 @@ class AlterarDadosClientesApp:
                 if len(zanthus_confirmação) > 0:
                     salvar_credenciais_json(login_funcionario, senha_funcionario)
                     self.adicionar_log("Login Zanthus realizado com sucesso!", "sucesso")
+                    self.adicionar_log("✓ Zanthus validado", "sucesso")
                 else:
                     self.adicionar_log("Falha no Login Zanthus: Usuário ou Senha incorretos.", "erro")
                     messagebox.showerror("Erro de Login", "Código ou Senha Zanthus estão incorretos.\n\n💡 SOLUÇÃO: Verifique os dados digitados.")
