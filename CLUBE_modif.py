@@ -576,52 +576,64 @@ def loguin_function():
 
 def clientes_page():
     global cpf, email, senha
-    import traceback
+    import traceback as _tb
     try:
-        # Preenche o CPF e aperta Enter
         report_log(f"Buscando CPF: {cpf}")
-        page.locator("#cpfcliente").fill(cpf)
+        tentar_seletores(page, "crm_cpf_campo", "fill", step="busca_cpf", valor=cpf)
         page.keyboard.press("Enter")
-        
-        # Espera o botão editar aparecer
-        page.wait_for_selector("#btnEditar", timeout=30000)
-        report_log("Cliente encontrado. Abrindo edição...")
-        page.locator("#btnEditar").click()
-        
-        # Espera carregar os campos de edição
-        page.wait_for_selector("#Nome", timeout=30000)
-        
-        # Realiza a alteração de dados
+
+        # CRITICO: timeout aqui = CPF nao encontrado (permanente).
+        # classificar_erro detecta step="busca_cpf" + PlaywrightTimeoutError como permanente.
+        tentar_seletores(page, "crm_btn_editar", "wait", step="busca_cpf", timeout=30000)
+        report_log("Cliente encontrado. Abrindo edicao...")
+        tentar_seletores(page, "crm_btn_editar", "click", step="busca_cpf")
+
+        tentar_seletores(page, "crm_nome", "wait", step="edicao_dados", timeout=30000)
+
         alterar_dados()
-        
-        report_log("Enviando alterações no CRM...")
-        # Clica em Salvar
-        page.locator("#btnSalvar").click()
-        
-        # Espera a mensagem de OK que estiver visível e clica nela
-        report_log("Aguardando confirmação de sucesso...")
-        page.locator("#lnkMensagemOK").filter(visible=True).first.click(timeout=30000)
+
+        report_log("Enviando alteracoes no CRM...")
+        tentar_seletores(page, "crm_btn_salvar", "click", step="salvar")
+
+        report_log("Aguardando confirmacao de sucesso...")
+        # lnkMensagemOK pode ter multiplas instancias — filtra o visivel
+        seletores_ok = SELECTORS.get("crm_msg_ok", [])
+        clicou_ok = False
+        for sel in seletores_ok:
+            try:
+                page.locator(sel).filter(visible=True).first.click(timeout=15000)
+                clicou_ok = True
+                break
+            except (PlaywrightTimeoutError, PlaywrightError):
+                continue
+        if not clicou_ok:
+            raise PlaywrightError("[step=confirmar_ok] Mensagem de confirmacao nao encontrada apos salvar.")
+
         report_log("Confirmando mensagem de sucesso...", "sucesso")
-        
         finalizar_playwright()
     except Exception as e:
+        # Determinar step a partir da excecao para screenshot descritivo
+        step_exc = _extrair_step_da_excecao(e) or "clientes_page"
+        caminho = tirar_screenshot_erro(prefixo=f"[step={step_exc}]_erro")
+        if caminho:
+            report_log(f"Screenshot salvo: {caminho}", "info")
         finalizar_playwright()
-        raise Exception(f"ERRO ao processar página de cliente: {str(e)}\n{traceback.format_exc()}")
+        raise Exception(f"[step={step_exc}] ERRO ao processar pagina de cliente: {str(e)}\n{_tb.format_exc()}")
 
 def alterar_dados():
-    import traceback
+    import traceback as _tb
     try:
         if change_email:
             report_log(f"Alterando email para: {email}")
-            page.locator("#Email").fill(email)
-            page.locator("#ConfirmarEmail").fill(email)
-        
+            tentar_seletores(page, "crm_email",           "fill", step="edicao_dados", valor=email)
+            tentar_seletores(page, "crm_confirmar_email", "fill", step="edicao_dados", valor=email)
+
         if change_password:
             report_log("Alterando senha...")
-            page.locator("#Senha").fill(senha)
-            page.locator("#ConfirmarSenha").fill(senha)
+            tentar_seletores(page, "crm_nova_senha",      "fill", step="edicao_dados", valor=senha)
+            tentar_seletores(page, "crm_confirmar_senha", "fill", step="edicao_dados", valor=senha)
     except Exception as e:
-        raise Exception(f"ERRO ao preencher dados: {str(e)}\n{traceback.format_exc()}")
+        raise Exception(f"[step=edicao_dados] ERRO ao preencher dados: {str(e)}\n{_tb.format_exc()}")
 
 def main_function():
     import traceback
