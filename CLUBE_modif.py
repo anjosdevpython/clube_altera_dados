@@ -2,7 +2,11 @@ import tkinter as tk
 from tkinter import messagebox
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import (
+    sync_playwright,
+    Error as PlaywrightError,
+    TimeoutError as PlaywrightTimeoutError,
+)
 import os   
 import random
 import sys
@@ -60,6 +64,8 @@ else:
 # Configurar logging para erros
 caminho_logs = os.path.join(app_data_dir, "logs")
 caminho_dados = os.path.join(app_data_dir, "data")
+caminho_screenshots = os.path.join(app_data_dir, "screenshots")
+os.makedirs(caminho_screenshots, exist_ok=True)
 os.makedirs(caminho_logs, exist_ok=True)
 os.makedirs(caminho_dados, exist_ok=True)
 logging.basicConfig(
