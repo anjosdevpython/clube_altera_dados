@@ -526,6 +526,62 @@ def remover_credencial_json(login):
         return True
     except: return False
 
+def _carregar_crm_config_webhook():
+    """Retorna webhook_url do crm_config.json, ou None se ausente/vazio."""
+    candidatos = [
+        os.path.join(base_proj_dir, "crm_config.json"),
+        os.path.join(os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)), "crm_config.json"),
+        os.path.join(caminho_dados, "crm_config.json"),
+    ]
+    for caminho in candidatos:
+        if os.path.exists(caminho):
+            try:
+                with open(caminho, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    url = cfg.get("webhook_url", "").strip()
+                    return url if url else None
+            except Exception:
+                return None
+    return None
+
+
+def _mascarar_cpf(cpf_str):
+    """Mascara CPF para auditoria: ***XXXXX-XX (LGPD)."""
+    c = cpf_str.strip().replace(".", "").replace("-", "")
+    if len(c) == 11:
+        return f"***{c[3:8]}-{c[8:]}"
+    return "***"
+
+
+def _enviar_log_auditoria(tipo_operacao, resultado, mensagem_erro=None):
+    """Dispara POST de auditoria em daemon thread. Nunca bloqueia nem propaga erro."""
+    webhook_url = _carregar_crm_config_webhook()
+    if not webhook_url:
+        return
+    payload = {
+        "cpf": _mascarar_cpf(cpf),
+        "operador": login_funcionario,
+        "tipo_operacao": tipo_operacao,
+        "resultado": resultado,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    if mensagem_erro is not None:
+        payload["mensagem_erro"] = str(mensagem_erro)
+
+    def _post():
+        try:
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                webhook_url, data=data,
+                headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass  # silencioso — nunca bloquear a operação principal
+
+    threading.Thread(target=_post, daemon=True).start()
+
+
 def _carregar_crm_config():
     """Carrega credenciais do CRM de crm_config.json (nunca hardcoded no código)."""
     candidatos = [
@@ -1109,6 +1165,7 @@ class AlterarDadosClientesApp:
                                 executar_com_retry(main_function)
                             except Exception as err:
                                 self.adicionar_log(f"Erro no CRM: {err}", "erro")
+                                _enviar_log_auditoria("SENHA", "erro", mensagem_erro=err)
                                 messagebox.showerror("Operação Falhou",
                                     f"Não foi possível alterar a senha.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
@@ -1116,6 +1173,7 @@ class AlterarDadosClientesApp:
                                 self.mostrar_btn_tentar_novamente()
                             else:
                                 tipo_alterado = "SENHA"
+                                _enviar_log_auditoria("SENHA", "sucesso")
                                 self.adicionar_log(f"✅ {tipo_alterado} alterado com sucesso para CPF {cpf}.", "sucesso")
                                 messagebox.showinfo("Sucesso", f"Senha alterada com sucesso!\n\nCPF: {cpf}\nNova Senha: {senha}")
                                 self.reset_values()
@@ -1130,6 +1188,7 @@ class AlterarDadosClientesApp:
                                 executar_com_retry(main_function)
                             except Exception as err:
                                 self.adicionar_log(f"Erro no CRM: {err}", "erro")
+                                _enviar_log_auditoria("EMAIL", "erro", mensagem_erro=err)
                                 messagebox.showerror("Operação Falhou",
                                     f"Não foi possível alterar o email.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
@@ -1137,6 +1196,7 @@ class AlterarDadosClientesApp:
                                 self.mostrar_btn_tentar_novamente()
                             else:
                                 tipo_alterado = "EMAIL"
+                                _enviar_log_auditoria("EMAIL", "sucesso")
                                 self.adicionar_log(f"✅ {tipo_alterado} alterado com sucesso para CPF {cpf}.", "sucesso")
                                 messagebox.showinfo("Sucesso", f"Email alterado com sucesso!\n\nCPF: {cpf}\nNovo Email: {email}")
                                 self.reset_values()
@@ -1151,13 +1211,15 @@ class AlterarDadosClientesApp:
                                 executar_com_retry(main_function)
                             except Exception as err:
                                 self.adicionar_log(f"Erro no CRM: {err}", "erro")
+                                _enviar_log_auditoria("SENHA E EMAIL", "erro", mensagem_erro=err)
                                 messagebox.showerror("Operação Falhou",
                                     f"Não foi possível alterar os dados.\n\n"
                                     f"🔍 Detalhe: {err}\n\n"
-                                    "💡 SOLUÇÃO: Reinicie o programa e tente novamente.")
+                                    "💡 Clique em 'Tentar novamente' ou verifique os dados e tente de novo.")
                                 self.mostrar_btn_tentar_novamente()
                             else:
                                 tipo_alterado = "SENHA E EMAIL"
+                                _enviar_log_auditoria("SENHA E EMAIL", "sucesso")
                                 self.adicionar_log(f"✅ {tipo_alterado} alterados com sucesso para CPF {cpf}.", "sucesso")
                                 messagebox.showinfo("Sucesso", f"Senha e Email alterados!\n\nCPF: {cpf}")
                                 self.reset_values()
