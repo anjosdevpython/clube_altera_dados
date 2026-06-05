@@ -217,6 +217,69 @@ def tentar_seletores(page_obj, chave: str, acao: str, step: str = "", **kwargs):
     raise PlaywrightError(msg)
 
 
+def classificar_erro(e: Exception, step: str = "") -> tuple:
+    """
+    Recebe uma excecao e o nome da etapa onde ocorreu.
+    Retorna (mensagem_para_operador: str, eh_permanente: bool).
+
+    mensagem_para_operador: texto sem traceback, destinado ao log da UI.
+    eh_permanente: True = nao tentar retry; False = erro transiente, retry valido.
+
+    REGRA CRITICA: checar PlaywrightTimeoutError ANTES de PlaywrightError,
+    pois TimeoutError e subclasse de Error.
+    """
+    # CPF nao encontrado: wait_for_selector("#btnEditar") atinge timeout na etapa de busca.
+    # Distinguido pela etapa, nao pelo tipo de excecao.
+    if step == "busca_cpf" and isinstance(e, PlaywrightTimeoutError):
+        return (
+            "CPF nao encontrado no sistema CRM. Verifique se o numero esta correto e cadastrado no Clube.",
+            True,  # permanente — sem retry
+        )
+
+    # Todos os seletores falharam apos tentar_seletores() — mensagem ja vem descritiva
+    if isinstance(e, PlaywrightError) and "Nenhum seletor funcionou" in str(e):
+        return (
+            f"Elemento da pagina nao encontrado (etapa: {step}). "
+            "O layout do CRM pode ter mudado. Informe o TI.",
+            True,  # permanente — retry nao resolve mudanca de layout
+        )
+
+    if isinstance(e, PlaywrightTimeoutError):
+        msgs = {
+            "login_zanthus": "Timeout ao carregar o portal Zanthus. O site pode estar lento ou fora do ar.",
+            "login_crm":     "Timeout ao carregar o CRM. O site pode estar lento ou fora do ar.",
+            "busca_cpf":     "Timeout aguardando resultado da busca de CPF no CRM.",
+            "salvar":        "Timeout aguardando confirmacao do CRM apos salvar os dados.",
+            "confirmar_ok":  "Timeout aguardando mensagem de confirmacao do CRM.",
+        }
+        msg = msgs.get(step, f"Operacao excedeu o tempo limite na etapa '{step}'. Tente novamente.")
+        return (msg, False)  # transiente
+
+    if isinstance(e, PlaywrightError):
+        raw = e.message
+        if "net::" in raw or "ERR_" in raw:
+            primeira_linha = raw.split("\n")[0]
+            return (
+                f"Falha de conexao com o sistema ({primeira_linha}). Verifique sua internet.",
+                False,  # transiente
+            )
+        if "closed" in raw.lower():
+            return (
+                "O navegador foi fechado inesperadamente. Tente novamente.",
+                False,  # transiente
+            )
+        return (
+            f"Erro inesperado do Playwright na etapa '{step}': {raw[:150]}",
+            False,
+        )
+
+    # Erro Python puro (FileNotFoundError, ValueError, FileNotFoundError do crm_config, etc.)
+    return (
+        f"Erro interno do programa ({type(e).__name__}): {str(e)[:150]}",
+        True,  # tratado como permanente — nao ha garantia de que retry resolve
+    )
+
+
 def change():
     global change_all, change_email, change_password
     if change_all == True:
