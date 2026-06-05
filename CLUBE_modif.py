@@ -379,7 +379,7 @@ def loguin_function_Zanthus():
     except Exception as e:
         caminho = tirar_screenshot_erro(prefixo=f"[step=login_zanthus]_erro")
         if caminho:
-            report_log(f"Screenshot salvo: {caminho}", "info")
+            report_log(f"Screenshot salvo: {caminho}", "erro", screenshot_path=caminho)
         finalizar_playwright()
         import traceback as _tb
         raise Exception(f"[step=login_zanthus] ERRO na funcao loguin_function_Zanthus(): {str(e)}\n{_tb.format_exc()}")
@@ -570,7 +570,7 @@ def loguin_function():
     except Exception as e:
         caminho = tirar_screenshot_erro(prefixo="[step=login_crm]_erro")
         if caminho:
-            report_log(f"Screenshot salvo: {caminho}", "info")
+            report_log(f"Screenshot salvo: {caminho}", "erro", screenshot_path=caminho)
         finalizar_playwright()
         raise Exception(f"[step=login_crm] ERRO no login do CRM: {str(e)}\n{_tb.format_exc()}")
 
@@ -616,7 +616,7 @@ def clientes_page():
         step_exc = _extrair_step_da_excecao(e) or "clientes_page"
         caminho = tirar_screenshot_erro(prefixo=f"[step={step_exc}]_erro")
         if caminho:
-            report_log(f"Screenshot salvo: {caminho}", "info")
+            report_log(f"Screenshot salvo: {caminho}", "erro", screenshot_path=caminho)
         finalizar_playwright()
         raise Exception(f"[step={step_exc}] ERRO ao processar pagina de cliente: {str(e)}\n{_tb.format_exc()}")
 
