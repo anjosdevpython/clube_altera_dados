@@ -11,8 +11,10 @@ import hashlib
 import base64
 from datetime import datetime
 import shutil
+import subprocess
 import logging
 from time import sleep
+import threading
 
 import urllib.request
 import urllib.error
@@ -20,7 +22,7 @@ import urllib.error
 # ============================================================================
 # CONFIGURAÇÕES DE ATUALIZAÇÃO
 # ============================================================================
-CURRENT_VERSION = "1.0.0"
+CURRENT_VERSION = "1.0.12"
 GITHUB_REPO = "anjosdevpython/clube_altera_dados"
 
 if getattr(sys, 'frozen', False):
@@ -49,11 +51,19 @@ try:
             CURRENT_VERSION = vf.read().strip()
 except: pass
 
+# Definir pasta de dados do usuário para evitar PermissionError
+if sys.platform == "win32":
+    app_data_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~\\AppData\\Local')), 'ClubeAlteraDados')
+else:
+    app_data_dir = os.path.join(os.path.expanduser('~'), '.clubealteradados')
+
 # Configurar logging para erros
-caminho_pasta = os.path.join(os.path.expanduser('~'), "pydata")
-os.makedirs(caminho_pasta, exist_ok=True)
+caminho_logs = os.path.join(app_data_dir, "logs")
+caminho_dados = os.path.join(app_data_dir, "data")
+os.makedirs(caminho_logs, exist_ok=True)
+os.makedirs(caminho_dados, exist_ok=True)
 logging.basicConfig(
-    filename=os.path.join(caminho_pasta, "pyerrors.log"),
+    filename=os.path.join(caminho_logs, "pyerrors.log"),
     level=logging.ERROR,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
@@ -66,7 +76,7 @@ except ImportError:
     print("Por favor, execute: pip install cryptography")
     sys.exit(1)
 
-sys.path.append(caminho_pasta)  
+sys.path.append(caminho_dados)  
 
 # Variáveis globais para controle das opções selecionadas
 zanthus_confirmação=[]
@@ -79,6 +89,15 @@ playwright_instance = None
 browser = None
 context = None
 page = None
+
+# Callback para atualização da UI em tempo real
+log_callback = None
+
+def report_log(msg, tipo="info"):
+    if log_callback:
+        log_callback(msg, tipo)
+    else:
+        print(f"[{tipo}] {msg}")
 
 def change():
     global change_all, change_email, change_password
@@ -99,12 +118,11 @@ def loguin_function_Zanthus():
         page.goto('https://minipreco.zanthus.bluesoft.com.br')
         
         # Preencher login e senha
+        report_log(f"Portal Zanthus carregado. Logando como {login_funcionario}...")
         page.locator("#USUARIO").fill(login_funcionario)
         page.locator("#SENHA").fill(senha_funcionario)
         
-        # Clicar no botão entrar
-        # O Selenium usava Keys.F12 no campo de senha mas clicava depois
-        # Aqui vamos clicar diretamente no botão de submit
+        report_log("Enviando formulário de login Zanthus...")
         page.locator('//input[@type="submit" and @value=" Entrar "]').click()
         
         # Aguarda pela presença do Menu para confirmar login
@@ -124,7 +142,7 @@ def loguin_function_Zanthus():
 def funcionais():
     global playwright_instance, browser, context, page
     playwright_instance = sync_playwright().start()
-    browser = playwright_instance.chromium.launch(headless=False)
+    browser = playwright_instance.chromium.launch(headless=True)
     context = browser.new_context(viewport={'width': 1920, 'height': 1080})
     page = context.new_page()
 
@@ -141,10 +159,7 @@ def finalizar_playwright():
 
 def escrever_arquivo_txt():
     try:
-        nome_pasta = "pydata"
-        caminho_pasta = os.path.join(os.path.expanduser('~'), nome_pasta)
-        os.makedirs(caminho_pasta, exist_ok=True)
-        caminho_arquivo = os.path.join(caminho_pasta, "pyhistloc.txt")
+        caminho_arquivo = os.path.join(caminho_dados, "pyhistloc.txt")
         with open(caminho_arquivo, "a+", encoding="utf-8") as arquivo:
             try:
                 arquivo.write(f'Código do funcionário: {login_funcionario}   cpf do cliente: {cpf}  email: {email}, senha: {senha}\n')
@@ -170,11 +185,9 @@ def get_cipher():
 
 def salvar_credenciais_json(login, senha):
     try:
-        nome_pasta = "pydata"
-        caminho_pasta = os.path.join(os.path.expanduser('~'), nome_pasta)
-        os.makedirs(caminho_pasta, exist_ok=True)
-        caminho_arquivo = os.path.join(caminho_pasta, "pyhiscred.json")
-        caminho_backup = os.path.join(caminho_pasta, "pyhiscred.json.backup")
+        # Agora usa a pasta local 'data' na raiz da instalação
+        caminho_arquivo = os.path.join(caminho_dados, "pyhiscred.json")
+        caminho_backup = os.path.join(caminho_dados, "pyhiscred.json.backup")
         
         if os.path.exists(caminho_arquivo) and not os.access(caminho_arquivo, os.W_OK):
             return False
@@ -234,9 +247,8 @@ def salvar_credenciais_json(login, senha):
 
 def buscar_credencial_json(login):
     try:
-        nome_pasta = "pydata"
-        caminho_pasta = os.path.join(os.path.expanduser('~'), nome_pasta)
-        caminho_arquivo = os.path.join(caminho_pasta, "pyhiscred.json")
+        # Agora usa a pasta local 'data'
+        caminho_arquivo = os.path.join(caminho_dados, "pyhiscred.json")
         if not os.path.exists(caminho_arquivo): return None
         with open(caminho_arquivo, "rb") as f:
             dados_encrypted = f.read()
@@ -253,9 +265,8 @@ def buscar_credencial_json(login):
 
 def remover_credencial_json(login):
     try:
-        nome_pasta = "pydata"
-        caminho_pasta = os.path.join(os.path.expanduser('~'), nome_pasta)
-        caminho_arquivo = os.path.join(caminho_pasta, "pyhiscred.json")
+        # Agora usa a pasta local 'data'
+        caminho_arquivo = os.path.join(caminho_dados, "pyhiscred.json")
         if not os.path.exists(caminho_arquivo): return True
         with open(caminho_arquivo, "rb") as f:
             dados_encrypted = f.read()
@@ -270,22 +281,48 @@ def remover_credencial_json(login):
         return True
     except: return False
 
+def _carregar_crm_config():
+    """Carrega credenciais do CRM de crm_config.json (nunca hardcoded no código)."""
+    candidatos = [
+        os.path.join(base_proj_dir, "crm_config.json"),
+        os.path.join(os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)), "crm_config.json"),
+        os.path.join(caminho_dados, "crm_config.json"),
+    ]
+    for caminho in candidatos:
+        if os.path.exists(caminho):
+            try:
+                with open(caminho, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    return cfg.get("usuario", ""), cfg.get("senha", "")
+            except Exception as e:
+                logging.error(f"Erro ao ler crm_config.json em {caminho}: {e}")
+    logging.error("crm_config.json não encontrado. Crie o arquivo com {\"usuario\": \"...\", \"senha\": \"...\"}")
+    raise FileNotFoundError(
+        "Arquivo crm_config.json não encontrado.\n"
+        f"Crie-o em: {candidatos[0]}\n"
+        "Conteúdo esperado: {\"usuario\": \"LOGIN\", \"senha\": \"SENHA\"}"
+    )
+
 def loguin_function():
     import traceback
     try:
+        crm_usuario, crm_senha = _carregar_crm_config()
         funcionais()
+        report_log("Acessando CRM Mini Preço (Bnex)...")
         page.goto('https://crm.grupominipreco.com.br')
         page.wait_for_selector("#Usuario", timeout=15000)
-        page.locator("#Usuario").fill('GUSTAVO.ALVES')
-        page.locator("#Senha").fill('Cwb123@')
+        report_log("Realizando login no CRM...")
+        page.locator("#Usuario").fill(crm_usuario)
+        page.locator("#Senha").fill(crm_senha)
         page.locator("#btnEntrar").click()
         
         # Espera carregar a página inicial
         page.wait_for_load_state("networkidle")
         
+        report_log("Navegando para página de Clientes...")
         # Vai para a página de clientes
         page.goto('https://crm.grupominipreco.com.br/Cliente/')
-        page.wait_for_selector("#cpfcliente", timeout=15000)
+        page.wait_for_selector("#cpfcliente", timeout=30000)
     except Exception as e:
         finalizar_playwright()
         raise Exception(f"ERRO no login do CRM: {str(e)}\n{traceback.format_exc()}")
@@ -295,25 +332,29 @@ def clientes_page():
     import traceback
     try:
         # Preenche o CPF e aperta Enter
+        report_log(f"Buscando CPF: {cpf}")
         page.locator("#cpfcliente").fill(cpf)
         page.keyboard.press("Enter")
         
         # Espera o botão editar aparecer
-        page.wait_for_selector("#btnEditar", timeout=15000)
+        page.wait_for_selector("#btnEditar", timeout=30000)
+        report_log("Cliente encontrado. Abrindo edição...")
         page.locator("#btnEditar").click()
         
         # Espera carregar os campos de edição
-        page.wait_for_selector("#Nome", timeout=15000)
+        page.wait_for_selector("#Nome", timeout=30000)
         
         # Realiza a alteração de dados
         alterar_dados()
         
+        report_log("Enviando alterações no CRM...")
         # Clica em Salvar
         page.locator("#btnSalvar").click()
         
-        # Espera a mensagem de OK e clica
-        page.wait_for_selector("#lnkMensagemOK", timeout=15000)
-        page.locator("#lnkMensagemOK").first.click()
+        # Espera a mensagem de OK que estiver visível e clica nela
+        report_log("Aguardando confirmação de sucesso...")
+        page.locator("#lnkMensagemOK").filter(visible=True).first.click(timeout=30000)
+        report_log("Confirmando mensagem de sucesso...", "sucesso")
         
         finalizar_playwright()
     except Exception as e:
@@ -324,10 +365,12 @@ def alterar_dados():
     import traceback
     try:
         if change_email:
+            report_log(f"Alterando email para: {email}")
             page.locator("#Email").fill(email)
             page.locator("#ConfirmarEmail").fill(email)
         
         if change_password:
+            report_log("Alterando senha...")
             page.locator("#Senha").fill(senha)
             page.locator("#ConfirmarSenha").fill(senha)
     except Exception as e:
@@ -355,22 +398,41 @@ class AlterarDadosClientesApp:
     def __init__(self, root):
         self.root = root
         self.root.title("ALTERAR DADOS CLIENTES - PLAYWRIGHT ENGINE")
-        self.root.geometry("500x600")
+        self.root.geometry("550x700")
         
-        self.style = ttk.Style("flatly")
-        self.style.configure("TFrame", background="white")
-        self.style.configure("TLabel", background="white")
-        self.style.configure("black.TButton", 
-                      background="black", 
-                      foreground="white",
-                      font=("Inter", 10, "bold"))
+        # Carregar ícone se existir
+        # No executável, ele fica no bundle_dir (MEIPASS)
+        if getattr(sys, 'frozen', False):
+            icon_path = os.path.join(getattr(sys, '_MEIPASS', os.getcwd()), "clube_icon.ico")
+        else:
+            icon_path = "clube_icon.ico"
+            
+        if os.path.exists(icon_path):
+            try: self.root.iconbitmap(icon_path)
+            except: pass
         
-        # Estilo para o botão de update
-        self.style.configure("update.TButton", font=("Inter", 8))
+        self.tema_atual = "flatly"
+        self.style = ttk.Style(self.tema_atual)
+        self.style.configure("TFrame", background="#f0f2f5")
+        self.style.configure("TLabel", background="#f0f2f5", font=("Inter", 10))
+        self.style.configure("Header.TLabel", font=("Inter", 14, "bold"), foreground="#DD1426")
+        self.style.configure("Sub.TLabel", font=("Inter", 9, "bold"), foreground="#555")
         
-        self.var_senha = tk.BooleanVar()
-        self.var_email = tk.BooleanVar()
-        self.var_senha_email = tk.BooleanVar()
+        self.style.configure("Action.TButton", 
+                      font=("Inter", 11, "bold"),
+                      padding=10)
+        
+        self.style.configure("TLabelframe", background="#f0f2f5", borderwidth=1)
+        self.style.configure("TLabelframe.Label", background="#f0f2f5", font=("Inter", 10, "bold"), foreground="#DD1426")
+        
+        self.var_opcao = tk.StringVar(value="")
+        
+        # Lista para armazenar o histórico de resultados na memória
+        self.historico_resultados = []
+        
+        # Configura o callback global para as funções de automação
+        global log_callback
+        log_callback = self.adicionar_log
         
         self.build_ui()
     
@@ -383,104 +445,219 @@ class AlterarDadosClientesApp:
                 latest_version = release.get("tag_name", "").replace("v", "")
                 
                 if latest_version and latest_version != CURRENT_VERSION.replace("v", ""):
-                    if messagebox.askyesno("Atualização Disponível", f"Uma nova versão ({latest_version}) foi encontrada!\nDeseja atualizar agora?\n\nO programa será fechado para concluir a instalação."):
-                        # Caminho do updater (assume que está na pasta 'updater' conforme installer.iss)
-                        updater_exe = os.path.join(base_proj_dir, "updater", "clube_updater.exe")
-                        if os.path.exists(updater_exe):
-                            subprocess.Popen([updater_exe], cwd=os.path.dirname(updater_exe))
-                            self.root.destroy()
-                            sys.exit(0)
+                    atualizar = True if not manual else messagebox.askyesno(
+                        "Atualização Disponível",
+                        f"Uma nova versão ({latest_version}) foi encontrada!\nDeseja atualizar agora?\n\n"
+                        "O programa será fechado para concluir a instalação."
+                    )
+                    if atualizar:
+                        # Tenta localizar o updater em diferentes layouts de instalação
+                        candidatos = [
+                            os.path.normpath(os.path.join(base_proj_dir, "updater", "clube_updater.exe")),
+                            os.path.normpath(os.path.join(os.path.dirname(sys.executable), "updater", "clube_updater.exe")),
+                            os.path.normpath(os.path.join(base_proj_dir, "clube_updater.exe"))
+                        ]
+                        updater_exe = next((p for p in candidatos if os.path.exists(p)), None)
+                        
+                        if updater_exe:
+                            try:
+                                subprocess.Popen(
+                                    [updater_exe],
+                                    cwd=os.path.dirname(updater_exe),
+                                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                                )
+                                self.root.destroy()
+                                sys.exit(0)
+                            except Exception as e:
+                                logging.error(f"Erro ao executar updater: {e}")
+                                messagebox.showerror("Erro de Execução", f"Não foi possível iniciar o atualizador.\n\nDetalhe: {e}")
                         else:
-                            messagebox.showerror("Erro", "O arquivo de atualização (clube_updater.exe) não foi encontrado.")
+                            logging.error(f"Updater não encontrado. Caminhos testados: {candidatos}")
+                            messagebox.showerror(
+                                "Componente Ausente",
+                                "O arquivo de atualização não foi encontrado.\n\n"
+                                f"Caminhos testados:\n- " + "\n- ".join(candidatos) + "\n\n"
+                                "💡 SOLUÇÃO: Reinstale o programa para restaurar os componentes do sistema."
+                            )
                 elif manual:
-                    messagebox.showinfo("Atualização", "Você já está utilizando a versão mais recente.")
+                    # Silenciado conforme pedido do usuário
+                    pass
         except Exception as e:
             if manual:
-                messagebox.showerror("Erro", f"Não foi possível verificar atualizações.\n{e}")
+                messagebox.showerror("Falha na Rede", 
+                    f"Não foi possível verificar atualizações.\n\n"
+                    f"🔍 Detalhe: {e}\n\n"
+                    "💡 SOLUÇÃO: Verifique sua conexão com a internet e se o GitHub não está bloqueado na sua rede.")
+
+    def alternar_tema(self):
+        if self.tema_atual == "flatly":
+            self.tema_atual = "darkly"
+            self.btn_tema.config(text="☀️ Claro")
+        else:
+            self.tema_atual = "flatly"
+            self.btn_tema.config(text="🌙 Escuro")
+            
+        self.style.theme_use(self.tema_atual)
+        
+        # Se for darkly, ajustamos alguns text/border ou deixamos o ttkbootstrap se virar
+        if self.tema_atual == "darkly":
+            self.style.configure("TFrame", background="#222")
+            self.style.configure("TLabel", background="#222", foreground="#eee")
+            self.style.configure("TLabelframe", background="#222")
+            self.style.configure("TLabelframe.Label", background="#222", foreground="#ff6b6b")
+            self.style.configure("Sub.TLabel", background="#222", foreground="#bbb")
+        else:
+            self.style.configure("TFrame", background="#f0f2f5")
+            self.style.configure("TLabel", background="#f0f2f5", foreground="#000")
+            self.style.configure("TLabelframe", background="#f0f2f5")
+            self.style.configure("TLabelframe.Label", background="#f0f2f5", foreground="#DD1426")
+            self.style.configure("Sub.TLabel", background="#f0f2f5", foreground="#555")
 
     def build_ui(self):
-        # Container principal para permitir colocar o footer no fundo
-        main_container = ttk.Frame(self.root)
+        # Container principal com fundo cinza claro para contraste
+        main_container = ttk.Frame(self.root, style="TFrame")
         main_container.pack(fill="both", expand=True)
 
-        # Título principal
-        title = ttk.Label(main_container, text="VALIDAÇÃO DO FUNCIONÁRIO", font=("Inter", 16, "bold"), foreground="#DD1426")
-        title.pack(pady=(20, 10))
+        # Header / Banner
+        header_frame = ttk.Frame(main_container, bootstyle="danger")
+        header_frame.pack(fill="x", pady=(0, 20))
         
-        login_frame = ttk.Frame(main_container)
-        login_frame.pack(pady=10, fill="x", padx=20)
-        
-        ttk.Label(login_frame, text="CÓDIGO ZANTHUS", font=("Inter", 10, "bold")).grid(row=0, column=0, sticky='w', pady=(5, 0), columnspan=2)
-        self.login_funcionario_entry = ttk.Entry(login_frame, width=72, bootstyle="dark")
-        self.login_funcionario_entry.grid(row=1, column=0, sticky='w', pady=(0, 10), columnspan=2)
-        
-        ttk.Label(login_frame, text="SENHA ZANTHUS", font=("Inter", 10, "bold")).grid(row=2, column=0, sticky='w', pady=(5, 0), columnspan=2)
-        self.senha_funcionario_entry = ttk.Entry(login_frame, width=72, show="*", bootstyle="dark")
-        self.senha_funcionario_entry.grid(row=3, column=0, sticky='w', pady=(0, 15), columnspan=2)
-        
-        title2 = ttk.Label(main_container, text="ALTERAR DADOS DOS CLIENTES", font=("Inter", 16, "bold"), foreground="#DD1426")
-        title2.pack(pady=(20, 10))
+        ttk.Label(header_frame, text="🛡️ CLUBE ALTERA DADOS", 
+                  font=("Inter", 16, "bold"), foreground="white", 
+                  bootstyle="inverse-danger", padding=15).pack(side="left")
+                  
+        self.btn_tema = ttk.Button(header_frame, text="🌙 Escuro", bootstyle="light", command=self.alternar_tema)
+        self.btn_tema.pack(side="right", padx=15)
 
-        checkbox_frame = ttk.Frame(main_container)
-        checkbox_frame.pack(pady=10, fill="x", padx=40)
+        # --- SEÇÃO 1: ACESSO ZANTHUS ---
+        zanthus_card = ttk.Labelframe(main_container, text=" 🔑 VALIDAÇÃO ZANTHUS ", padding=15)
+        zanthus_card.pack(fill="x", padx=20, pady=10)
         
-        self.senha_check = ttk.Checkbutton(checkbox_frame, text="SENHA", variable=self.var_senha, bootstyle="danger", command=lambda: self.update_checkbox("senha"))
-        self.senha_check.grid(row=0, column=0, padx=35)
+        zan_inner = ttk.Frame(zanthus_card)
+        zan_inner.pack(fill="x")
         
-        self.email_check = ttk.Checkbutton(checkbox_frame, text="EMAIL", variable=self.var_email, bootstyle="danger", command=lambda: self.update_checkbox("email"))
-        self.email_check.grid(row=0, column=1, padx=35)
+        zan_left = ttk.Frame(zan_inner)
+        zan_left.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ttk.Label(zan_left, text="CÓDIGO FUNCIONÁRIO:", style="Sub.TLabel").pack(anchor="w")
+        self.login_funcionario_entry = ttk.Entry(zan_left, bootstyle="dark")
+        self.login_funcionario_entry.pack(fill="x", pady=(0, 5))
         
-        self.senha_email_check = ttk.Checkbutton(checkbox_frame, text="SENHA E EMAIL", variable=self.var_senha_email, bootstyle="danger", command=lambda: self.update_checkbox("senha_email"))
-        self.senha_email_check.grid(row=0, column=2, padx=35)
+        zan_right = ttk.Frame(zan_inner)
+        zan_right.pack(side="right", fill="x", expand=True, padx=(5, 0))
+        ttk.Label(zan_right, text="SENHA DE ACESSO:", style="Sub.TLabel").pack(anchor="w")
+        self.senha_funcionario_entry = ttk.Entry(zan_right, show="*", bootstyle="dark")
+        self.senha_funcionario_entry.pack(fill="x", pady=(0, 5))
         
-        inputs_frame = ttk.Frame(main_container)
-        inputs_frame.pack(pady=10, fill="x", padx=20)
+        # --- SEÇÃO 2: AÇÃO E CLIENTE ---
+        cliente_card = ttk.Labelframe(main_container, text=" 👤 DADOS DO CLIENTE ", padding=15)
+        cliente_card.pack(fill="x", padx=20, pady=10)
         
-        ttk.Label(inputs_frame, text="DIGITE O CPF DO CLIENTE", font=("Inter", 10, "bold")).grid(row=0, column=0, sticky='w', pady=(5, 0), columnspan=2)
-        self.cpf_entry = ttk.Entry(inputs_frame, width=72, bootstyle="dark")
-        self.cpf_entry.grid(row=1, column=0, sticky='w', pady=(0, 10), columnspan=2)
+        # Seleção de Ocupação (Checkboxes em destaque)
+        check_frame = ttk.Frame(cliente_card)
+        check_frame.pack(fill="x", pady=(0, 15))
         
-        ttk.Label(inputs_frame, text="DIGITE O NOVO EMAIL", font=("Inter", 10, "bold")).grid(row=2, column=0, sticky='w', pady=(5, 0), columnspan=2)
-        self.email_entry = ttk.Entry(inputs_frame, width=72, bootstyle="dark")
-        self.email_entry.grid(row=3, column=0, sticky='w', pady=(0, 10), columnspan=2)
+        self.senha_check = ttk.Radiobutton(check_frame, text="SENHA", variable=self.var_opcao, value="senha",
+                                        bootstyle="danger-toolbutton", command=self.update_checkbox)
+        self.senha_check.pack(side="left", expand=True, padx=2, fill="x")
         
-        ttk.Label(inputs_frame, text="DIGITE SUA NOVA SENHA   (Somente números)", font=("Inter", 10, "bold")).grid(row=4, column=0, sticky='w', pady=(5, 0), columnspan=2)
-        self.senha_entry = ttk.Entry(inputs_frame, width=72, show="*", bootstyle="dark")
-        self.senha_entry.grid(row=5, column=0, sticky='w', pady=(0, 10), columnspan=2)
+        self.email_check = ttk.Radiobutton(check_frame, text="EMAIL", variable=self.var_opcao, value="email",
+                                        bootstyle="danger-toolbutton", command=self.update_checkbox)
+        self.email_check.pack(side="left", expand=True, padx=2, fill="x")
         
-        iniciar_btn = ttk.Button(main_container, text="INICIAR", style="black.TButton", command=self.iniciar)
-        iniciar_btn.pack(pady=20, fill="x", padx=20)
+        self.senha_email_check = ttk.Radiobutton(check_frame, text="AMBOS", variable=self.var_opcao, value="senha_email",
+                                               bootstyle="danger-toolbutton", command=self.update_checkbox)
+        self.senha_email_check.pack(side="left", expand=True, padx=2, fill="x")
 
-        # Footer com Versão e Botão de Update
-        footer = ttk.Frame(self.root, bootstyle="light")
+        cli_inner = ttk.Frame(cliente_card)
+        cli_inner.pack(fill="x", pady=(0, 10))
+        
+        cli_left = ttk.Frame(cli_inner)
+        cli_left.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ttk.Label(cli_left, text="CPF DO CLIENTE (11 dígitos, só números):", style="Sub.TLabel").pack(anchor="w")
+        self.cpf_entry = ttk.Entry(cli_left, bootstyle="dark")
+        self.cpf_entry.pack(fill="x", pady=(0, 5))
+        
+        cli_right = ttk.Frame(cli_inner)
+        cli_right.pack(side="right", fill="x", expand=True, padx=(5, 0))
+        ttk.Label(cli_right, text="NOVA SENHA (SÓ NÚMEROS, MIN 4):", style="Sub.TLabel").pack(anchor="w")
+        self.senha_entry = ttk.Entry(cli_right, show="*", bootstyle="dark")
+        self.senha_entry.pack(fill="x", pady=(0, 5))
+        
+        ttk.Label(cliente_card, text="NOVO EMAIL:", style="Sub.TLabel").pack(anchor="w")
+        self.email_entry = ttk.Entry(cliente_card, bootstyle="dark")
+        self.email_entry.pack(fill="x")
+
+        # --- BOTÃO PRINCIPAL E PROGRESSBAR ---
+        self.iniciar_btn = ttk.Button(main_container, text="🚀 INICIAR AUTOMAÇÃO", 
+                                     style="Action.TButton", bootstyle="danger",
+                                     command=self.start_thread)
+        self.iniciar_btn.pack(pady=(15, 5), fill="x", padx=20)
+        
+        self.progressbar = ttk.Progressbar(main_container, mode="indeterminate", bootstyle="danger")
+        # escondido inicialmente, será ativado no start_thread
+
+        # --- SEÇÃO 3: LOGS ---
+        log_card = ttk.Frame(main_container, padding=1)
+        log_card.pack(fill="both", expand=True, padx=20, pady=(0, 5))
+        
+        ttk.Label(log_card, text="📋 STATUS DO PROCESSO", style="Sub.TLabel").pack(anchor="w")
+        
+        result_inner = ttk.Frame(log_card)
+        result_inner.pack(fill="both", expand=True)
+        
+        self.log_text = tk.Text(result_inner, height=6, font=("Consolas", 9), 
+                               borderwidth=1, relief="solid", padx=10, pady=10)
+        self.log_text.tag_configure("info", foreground="#007bff")
+        self.log_text.tag_configure("sucesso", foreground="#28a745")
+        self.log_text.tag_configure("erro", foreground="#dc3545")
+        self.log_text.pack(side="left", fill="both", expand=True)
+        
+        scrollbar = ttk.Scrollbar(result_inner, orient="vertical", command=self.log_text.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.log_text.configure(yscrollcommand=scrollbar.set)
+        self.log_text.config(state="disabled")
+        
+        # Botões do Log
+        btns_log = ttk.Frame(log_card)
+        btns_log.pack(fill="x", pady=5)
+        
+        ttk.Button(btns_log, text="🗑️ Limpar", bootstyle="link-secondary", 
+                   command=lambda: [self.log_text.config(state="normal"), self.log_text.delete("1.0", tk.END), self.log_text.config(state="disabled")]).pack(side="left")
+        
+        self.export_btn = ttk.Button(btns_log, text="💾 Exportar Relatório", 
+                                    bootstyle="outline-secondary", command=self.exportar_log)
+        self.export_btn.pack(side="right")
+
+        # Footer
+        footer = ttk.Frame(self.root, bootstyle="secondary")
         footer.pack(side="bottom", fill="x")
         
-        version_label = ttk.Label(footer, text=f"Versão: {CURRENT_VERSION}", font=("Inter", 8), bootstyle="secondary")
-        version_label.pack(side="left", padx=10, pady=5)
+        version_label = ttk.Label(footer, text=f"Build: {CURRENT_VERSION} | Playwright Engine", 
+                                 font=("Inter", 7), bootstyle="inverse-secondary", padding=5)
+        version_label.pack(side="left")
         
-        update_btn = ttk.Button(footer, text="VERIFICAR ATUALIZAÇÃO", style="update.TButton", 
-                                bootstyle="link", command=self.check_updates)
-        update_btn.pack(side="right", padx=10, pady=5)
+        credits_label = ttk.Label(footer, text="Desenvolvido por Allan Anjos & Victor Lameiro", 
+                                 font=("Inter", 7), bootstyle="inverse-secondary", padding=5)
+        credits_label.pack(side="right")
         
-        # Verificar atualização silenciosamente ao abrir
-        self.root.after(2000, lambda: self.check_updates(manual=False))
+        # Bind do ENTER para facilitar
+        self.root.bind('<Return>', lambda e: self.start_thread())
+        
+        # Verificar atualização automaticamente
+        self.root.after(1500, lambda: self.check_updates(manual=False))
 
-    def update_checkbox(self, selected):
+    def update_checkbox(self, selected=None):
         global change_password, change_email, change_all
         change_password = False
         change_email = False
         change_all = False
-        self.var_senha.set(False)
-        self.var_email.set(False)
-        self.var_senha_email.set(False)
+        
+        selected = self.var_opcao.get()
         if selected == "senha":
-            self.var_senha.set(True)
             change_password = True
         elif selected == "email":
-            self.var_email.set(True)
             change_email = True
         elif selected == "senha_email":
-            self.var_senha_email.set(True)
             change_all = True
     
     def reset_values(self):
@@ -490,13 +667,83 @@ class AlterarDadosClientesApp:
         self.senha_entry.delete(0, tk.END)
         self.login_funcionario_entry.delete(0, tk.END)
         self.senha_funcionario_entry.delete(0, tk.END)
-        self.var_senha.set(False)
-        self.var_email.set(False)
-        self.var_senha_email.set(False)
+        self.var_opcao.set("")
         change_password = False
         change_email = False
         change_all = False
         zanthus_confirmação = []
+
+    def exportar_log(self):
+        """Salva o conteúdo do log em um arquivo TXT"""
+        try:
+            from tkinter import filedialog
+            conteudo = self.log_text.get("1.0", tk.END).strip()
+            if not conteudo:
+                messagebox.showwarning("Aviso", "O log está vazio.")
+                return
+            
+            # Sugere nome de arquivo com data
+            nome_sugerido = f"Relatorio_Alteracao_{datetime.now().strftime('%d_%m_%Y_%H%M')}.txt"
+            caminho = filedialog.asksaveasfilename(defaultextension=".txt", 
+                                                 initialfile=nome_sugerido,
+                                                 title="Salvar Log de Exportação",
+                                                 filetypes=[("Arquivo de Texto", "*.txt")])
+            if caminho:
+                with open(caminho, "w", encoding="utf-8") as f:
+                    f.write("RELATÓRIO DE ALTERAÇÃO DE DADOS - CLUBE MINI PREÇO\n")
+                    f.write("="*50 + "\n")
+                    f.write(conteudo)
+                    f.write("\n" + "="*50 + "\n")
+                    f.write(f"Exportado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+                messagebox.showinfo("Sucesso", f"Log exportado com sucesso!\n\n{caminho}")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Não foi possível exportar o log:\n{e}")
+
+    def adicionar_log(self, mensagem, tipo="info"):
+        """Adiciona uma mensagem formatada ao log e salva automaticamente no arquivo persistente"""
+        def _add():
+            self.log_text.config(state="normal")
+            agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            try:
+                cpf_txt = self.cpf_entry.get().strip() or "N/A"
+            except:
+                cpf_txt = "N/A"
+                
+            linha = f"{agora} - {mensagem} - {cpf_txt}"
+            prefixo = "✅" if tipo == "sucesso" else "❌" if tipo == "erro" else "🔹"
+            
+            self.log_text.insert(tk.END, f"{prefixo} {linha}\n", tipo)
+            
+            # Salva em arquivo persistente na pasta logs do programa
+            try:
+                log_file = os.path.join(caminho_logs, "automacoes.log")
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(f"{linha}\n")
+            except: pass
+                
+            self.log_text.see(tk.END)
+            self.log_text.config(state="disabled")
+            self.root.update_idletasks()
+        self.root.after(0, _add)
+
+    def fechar_progressbar(self):
+        self.progressbar.stop()
+        self.progressbar.pack_forget()
+        self.iniciar_btn.config(state="normal")
+
+    def start_thread(self):
+        self.iniciar_btn.config(state="disabled")
+        self.progressbar.pack(fill="x", padx=20, pady=(0, 10))
+        self.progressbar.start(10)
+        self.adicionar_log("Iniciando processo em segundo plano...")
+        thread = threading.Thread(target=self.run_in_thread, daemon=True)
+        thread.start()
+
+    def run_in_thread(self):
+        try:
+            self.iniciar()
+        finally:
+            self.root.after(0, self.fechar_progressbar)
 
     def iniciar(self):
         global change_password, change_email, change_all, cpf, email, senha, login_funcionario, senha_funcionario, zanthus_confirmação
@@ -506,54 +753,104 @@ class AlterarDadosClientesApp:
         senha = self.senha_entry.get()
         login_funcionario = self.login_funcionario_entry.get()
         senha_funcionario = self.senha_funcionario_entry.get()
-
+        zanthus_confirmação = [] # Limpa status anterior
+        
         filtrar_cpf()
         
         senha_salva = buscar_credencial_json(login_funcionario)
         
         if senha_salva and senha_salva == senha_funcionario:
             zanthus_confirmação = ['yes']
+            self.adicionar_log("Login Zanthus carregado (Cache).")
         else:
             try:
+                self.adicionar_log("Validando credentials no Zanthus...")
                 loguin_function_Zanthus()
                 if len(zanthus_confirmação) > 0:
                     salvar_credenciais_json(login_funcionario, senha_funcionario)
+                    self.adicionar_log("Login Zanthus realizado com sucesso!", "sucesso")
+                else:
+                    self.adicionar_log("Falha no Login Zanthus: Usuário ou Senha incorretos.", "erro")
+                    messagebox.showerror("Erro de Login", "Código ou Senha Zanthus estão incorretos.\n\n💡 SOLUÇÃO: Verifique os dados digitados.")
+                    return
             except Exception as err_zanthus: 
                 zanthus_confirmação = []
                 remover_credencial_json(login_funcionario)
-                messagebox.showinfo("ERRO NO LOGIN ZANTHUS", f"FALHA NO LOGUIN ZANTHUS\n\n{str(err_zanthus)}")
-        
+                self.adicionar_log(f"Erro técnico Zanthus: {str(err_zanthus)}", "erro")
+                messagebox.showerror("Erro de Login Zanthus", 
+                    f"Falha ao validar credenciais no Zanthus.\n\n"
+                    f"🔍 Erro: {str(err_zanthus)}\n\n"
+                    "💡 SOLUÇÃO:\n"
+                    "1. Verifique se seu Código e Senha Zanthus estão corretos.\n"
+                    "2. Verifique se o site do Bluesoft/Zanthus está fora do ar no navegador.")
+                return
+
         if len(zanthus_confirmação)>0:
             match len(cpf):
                 case 11:
                     if change_password:
                         if len(senha)>=4 and senha.isdigit():
-                            try: main_function()
-                            except Exception as err: messagebox.showinfo("ERRO", f"OPERACAO FALHOU\n{err}")
+                            try: 
+                                self.adicionar_log(f"Iniciando alteração de SENHA para CPF {cpf}...")
+                                main_function()
+                            except Exception as err: 
+                                self.adicionar_log(f"Erro no CRM: {err}", "erro")
+                                messagebox.showerror("Operação Falhou", 
+                                    f"Não foi possível alterar a senha.\n\n"
+                                    f"🔍 Detalhe: {err}\n\n"
+                                    "💡 SOLUÇÃO: Verifique se o CPF do cliente existe no CRM e se você tem permissão para editar.")
                             else:
-                                messagebox.showinfo("CONCLUÍDO", f"CPF: {cpf}\nNova Senha: {senha}")
+                                self.adicionar_log(f"SENHA alterada com sucesso para {cpf}!", "sucesso")
+                                messagebox.showinfo("Sucesso", f"Senha alterada com sucesso!\n\nCPF: {cpf}\nNova Senha: {senha}")
                                 self.reset_values()
-                        else: messagebox.showinfo("Atenção", "Senha deve ter 4 dígitos numéricos.")
+                        else: 
+                            messagebox.showwarning("Dados Inválidos", 
+                                "A senha deve conter pelo menos 4 dígitos numéricos.\n\n"
+                                "💡 SOLUÇÃO: Digite apenas números no campo de senha.")
                     elif change_email:
                         if len(email)>5 and "@" in email and "." in email:
-                            try: main_function()
-                            except Exception as err: messagebox.showinfo("ERRO", f"OPERACAO FALHOU\n{err}")
+                            try: 
+                                self.adicionar_log(f"Iniciando alteração de EMAIL para CPF {cpf}...")
+                                main_function()
+                            except Exception as err: 
+                                self.adicionar_log(f"Erro no CRM: {err}", "erro")
+                                messagebox.showerror("Operação Falhou", 
+                                    f"Não foi possível alterar o email.\n\n"
+                                    f"🔍 Detalhe: {err}\n\n"
+                                    "💡 SOLUÇÃO: Verifique sua conexão e se o CPF está correto no CRM.")
                             else:
-                                messagebox.showinfo("CONCLUÍDO", f"CPF: {cpf}\nNovo Email: {email}")
+                                self.adicionar_log(f"EMAIL alterado com sucesso para {cpf}!", "sucesso")
+                                messagebox.showinfo("Sucesso", f"Email alterado com sucesso!\n\nCPF: {cpf}\nNovo Email: {email}")
                                 self.reset_values()
-                        else: messagebox.showinfo("Atenção", "Email inválido.")
+                        else: 
+                            messagebox.showwarning("Email Inválido", 
+                                "O formato do email digitado é inválido.\n\n"
+                                "💡 SOLUÇÃO: Use o formato: nome@dominio.com")
                     elif change_all:
                         if len(senha)>=4 and senha.isdigit() and len(email)>5 and "@" in email and "." in email:
-                            try: main_function()
-                            except Exception as err: messagebox.showinfo("ERRO", f"OPERACAO FALHOU\n{err}")
+                            try: 
+                                self.adicionar_log(f"Iniciando alteração de SENHA E EMAIL para CPF {cpf}...")
+                                main_function()
+                            except Exception as err: 
+                                self.adicionar_log(f"Erro no CRM: {err}", "erro")
+                                messagebox.showerror("Operação Falhou", 
+                                    f"Não foi possível alterar os dados.\n\n"
+                                    f"🔍 Detalhe: {err}\n\n"
+                                    "💡 SOLUÇÃO: Reinicie o programa e tente novamente.")
                             else:
-                                messagebox.showinfo("CONCLUÍDO", f"CPF: {cpf}\nAlterados Senha e Email")
+                                self.adicionar_log(f"DADOS (Senha/Email) alterados com sucesso para {cpf}!", "sucesso")
+                                messagebox.showinfo("Sucesso", f"Senha e Email alterados!\n\nCPF: {cpf}")
                                 self.reset_values()
-                        else: messagebox.showinfo("Atenção", "Verifique os dados digitados.")
+                        else: 
+                            messagebox.showwarning("Verifique os Dados", 
+                                "A senha deve ter 4+ números e o email deve ser válido.\n\n"
+                                "💡 SOLUÇÃO: Preencha todos os campos corretamente.")
                     else:
                         messagebox.showinfo("Atenção", "Selecione o que deseja alterar.")
                 case _:
-                    messagebox.showinfo("CPF INVÁLIDO", "O CPF DEVE CONTER 11 DIGITOS")
+                    messagebox.showwarning("CPF Inválido", 
+                        f"O CPF digitado contém {len(cpf)} dígitos.\n\n"
+                        "💡 SOLUÇÃO: O CPF deve conter exatamente 11 números.")
 
 if __name__ == "__main__":
     root = ttk.Window(themename="flatly")

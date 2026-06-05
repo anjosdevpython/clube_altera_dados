@@ -12,9 +12,11 @@ import time
 # ==========================================
 # CONFIGURAÇÕES DA APLICAÇÃO
 # ==========================================
-GITHUB_REPO = "anjosdevpython/clube_altera_dados"         
-IS_PRIVATE = False                   
-GITHUB_TOKEN = ""                    
+GITHUB_REPO = "anjosdevpython/clube_altera_dados"
+IS_PRIVATE = False
+# Token lido de arquivo externo (nunca hardcoded no código)
+_token_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "github_token.txt")
+GITHUB_TOKEN = open(_token_file).read().strip() if os.path.exists(_token_file) else ""
 APP_EXE_NAME = "CLUBE_modif.exe"          
 ZIP_PREFIX = "CLUBE_modif-"               
 
@@ -27,6 +29,53 @@ else:
 APP_DIR = os.path.join(BASE_DIR, "app")
 VERSION_FILE = os.path.join(BASE_DIR, "version.txt")
 APP_EXE_PATH = os.path.join(APP_DIR, APP_EXE_NAME)
+
+# ==========================================
+# MENSAGENS DE ERRO E SOLUÇÕES
+# ==========================================
+ERRORS = {
+    "CHECK_UPDATE": {
+        "msg": "Erro ao verificar atualizações no GitHub.",
+        "sol": "Verifique sua conexão com a internet e tente novamente."
+    },
+    "ASSETS_NOT_FOUND": {
+        "msg": "Arquivos de atualização não encontrados no servidor.",
+        "sol": "Aguarde alguns minutos ou entre em contato com o desenvolvedor."
+    },
+    "DOWNLOAD_FAILED": {
+        "msg": "Falha ao baixar os arquivos de atualização.",
+        "sol": "Verifique sua conexão com a internet ou se um antivírus está bloqueando o download."
+    },
+    "HASH_MISMATCH": {
+        "msg": "Integridade do arquivo falhou (SHA256 incorreto).",
+        "sol": "O download pode ter sido corrompido. O atualizador tentará novamente na próxima execução."
+    },
+    "CLOSE_APP_FAILED": {
+        "msg": f"Não foi possível fechar o {APP_EXE_NAME} automaticamente.",
+        "sol": f"Por favor, feche o {APP_EXE_NAME} manualmente pelo Gerenciador de Tarefas."
+    },
+    "REPLACE_FILES_FAILED": {
+        "msg": "Erro ao substituir os arquivos da nova versão.",
+        "sol": "Certifique-se de que não há arquivos abertos e que você tem permissão de administrador."
+    },
+    "EXTRACT_FAILED": {
+        "msg": "Erro ao extrair o pacote de atualização.",
+        "sol": "O arquivo ZIP pode estar corrompido. Reinicie o atualizador para tentar novamente."
+    },
+    "EXE_NOT_FOUND": {
+        "msg": "O aplicativo principal não foi encontrado após a atualização.",
+        "sol": "A instalação pode ter falhado. Tente reinstalar o programa completamente."
+    }
+}
+
+def show_error(error_key, detail=""):
+    error = ERRORS.get(error_key, {"msg": "Erro desconhecido.", "sol": "Tente reiniciar o programa."})
+    print("\n" + "="*50)
+    print(f"❌ ERRO: {error['msg']}")
+    if detail:
+        print(f"🔍 DETALHE: {detail}")
+    print(f"💡 SOLUÇÃO: {error['sol']}")
+    print("="*50 + "\n")
 
 def get_current_version():
     if os.path.exists(VERSION_FILE):
@@ -43,7 +92,7 @@ def get_latest_github_release():
         with urllib.request.urlopen(req, timeout=8) as response:
             return json.loads(response.read().decode())
     except urllib.error.URLError as e:
-        print(f"Erro ao checar atualizacao: {e}")
+        show_error("CHECK_UPDATE", str(e))
         return None
 
 def download_file(url, dest):
@@ -68,7 +117,7 @@ def run_app():
         print("Iniciando aplicativo principal...")
         subprocess.Popen([APP_EXE_PATH], cwd=APP_DIR)
     else:
-        print(f"Erro: aplicativo não encontrado em {APP_EXE_PATH}")
+        show_error("EXE_NOT_FOUND", f"Caminho não existe: {APP_EXE_PATH}")
     sys.exit(0)
 
 def main():
@@ -97,7 +146,7 @@ def main():
             sha256_url = asset["url"] if IS_PRIVATE else asset["browser_download_url"]
             
     if not zip_url or not sha256_url:
-        print("Assets de atualizacao nao encontrados.")
+        show_error("ASSETS_NOT_FOUND")
         time.sleep(2)
         return
 
@@ -107,27 +156,53 @@ def main():
     try:
         download_file(sha256_url, temp_sha256)
         download_file(zip_url, temp_zip)
+    except Exception as e:
+        show_error("DOWNLOAD_FAILED", str(e))
+        time.sleep(5)
+        return
         
+    try:
         with open(temp_sha256, "r", encoding="utf-8") as f:
             expected_hash = f.read().strip().split()[0]
             
         print("Verificando integridade...")
         if not verify_sha256(temp_zip, expected_hash):
-            print("Erro de verificacao SHA256.")
+            show_error("HASH_MISMATCH")
             time.sleep(3)
             return
 
         print("Fechando aplicativo para atualizar...")
-        os.system(f"taskkill /F /IM \"{APP_EXE_NAME}\" >nul 2>&1")
-        time.sleep(2)
-        
-        print("Substituindo arquivos...")
-        if os.path.exists(APP_DIR):
-            shutil.rmtree(APP_DIR, ignore_errors=True)
-        os.makedirs(APP_DIR, exist_ok=True)
+        # Tenta fechar o app com retries
+        for _ in range(3):
+            try:
+                os.system(f"taskkill /F /IM \"{APP_EXE_NAME}\" >nul 2>&1")
+                time.sleep(2)
+            except: pass
             
-        with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
-            zip_ref.extractall(APP_DIR)
+        print("Substituindo arquivos...")
+        # Tenta remover a pasta antiga várias vezes
+        for _ in range(3):
+            try:
+                if os.path.exists(APP_DIR):
+                    shutil.rmtree(APP_DIR)
+                break
+            except:
+                time.sleep(2)
+                
+        try:
+            os.makedirs(APP_DIR, exist_ok=True)
+        except Exception as e:
+            show_error("REPLACE_FILES_FAILED", str(e))
+            time.sleep(5)
+            return
+            
+        try:
+            with zipfile.ZipFile(temp_zip, 'r') as zip_ref:
+                zip_ref.extractall(APP_DIR)
+        except Exception as e:
+            show_error("EXTRACT_FAILED", str(e))
+            time.sleep(5)
+            return
             
         with open(VERSION_FILE, "w", encoding="utf-8") as f:
             f.write(latest_version)
@@ -137,7 +212,7 @@ def main():
         run_app()
             
     except Exception as e:
-        print(f"Erro processando atualizacao: {e}")
+        show_error("REPLACE_FILES_FAILED", str(e))
         time.sleep(5)
     finally:
         if os.path.exists(temp_zip): os.remove(temp_zip)

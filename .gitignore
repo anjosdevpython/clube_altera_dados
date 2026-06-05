@@ -35,3 +35,9 @@ MANIFEST
 # IDEA/VSCode
 .vscode/
 .idea/
+
+# Secrets / Config externos (nunca comitar)
+crm_config.json
+github_token.txt
+data/
+logs/
