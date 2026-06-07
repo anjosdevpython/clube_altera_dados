@@ -26,7 +26,7 @@ import urllib.error
 # ============================================================================
 # CONFIGURAÇÕES DE ATUALIZAÇÃO
 # ============================================================================
-CURRENT_VERSION = "1.0.12"
+CURRENT_VERSION = "v1.0.14"
 GITHUB_REPO = "anjosdevpython/clube_altera_dados"
 
 if getattr(sys, 'frozen', False):
@@ -685,11 +685,29 @@ def loguin_function():
         tentar_seletores(page, "crm_senha_login", "type", step="login_crm", valor=crm_senha)
         tentar_seletores(page, "crm_btn_entrar",  "click", step="login_crm")
 
-        page.wait_for_load_state("networkidle")
+        # Aguardar redirecionamento inicial do dashboard do CRM para nao abortar a proxima navegacao
+        page.wait_for_timeout(3000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=10000)
+        except:
+            pass
+            
         report_log("✓ Login CRM realizado", "sucesso")
 
         report_log("Navegando para pagina de Clientes...")
-        page.goto('https://crm.grupominipreco.com.br/Cliente/')
+        for tentativa in range(3):
+            try:
+                page.goto('https://crm.grupominipreco.com.br/Cliente/', timeout=15000)
+                break
+            except Exception as e:
+                if "ERR_ABORTED" in str(e):
+                    report_log(f"Navegacao abortada (redirect interno, tentativa {tentativa+1}). Aguardando...")
+                    page.wait_for_timeout(3000)
+                else:
+                    raise
+        else:
+            page.goto('https://crm.grupominipreco.com.br/Cliente/')
+                
         tentar_seletores(page, "crm_cpf_campo", "wait", step="login_crm", timeout=30000)
     except Exception as e:
         caminho = tirar_screenshot_erro(prefixo="[step=login_crm]_erro")
@@ -830,41 +848,44 @@ class AlterarDadosClientesApp:
                 release = json.loads(response.read().decode())
                 latest_version = release.get("tag_name", "").replace("v", "")
                 
-                if latest_version and latest_version != CURRENT_VERSION.replace("v", ""):
-                    atualizar = True if not manual else messagebox.askyesno(
-                        "Atualização Disponível",
-                        f"Uma nova versão ({latest_version}) foi encontrada!\nDeseja atualizar agora?\n\n"
-                        "O programa será fechado para concluir a instalação."
-                    )
-                    if atualizar:
-                        # Tenta localizar o updater em diferentes layouts de instalação
-                        candidatos = [
-                            os.path.normpath(os.path.join(base_proj_dir, "updater", "clube_updater.exe")),
-                            os.path.normpath(os.path.join(os.path.dirname(sys.executable), "updater", "clube_updater.exe")),
-                            os.path.normpath(os.path.join(base_proj_dir, "clube_updater.exe"))
-                        ]
-                        updater_exe = next((p for p in candidatos if os.path.exists(p)), None)
-                        
-                        if updater_exe:
-                            try:
-                                subprocess.Popen(
-                                    [updater_exe],
-                                    cwd=os.path.dirname(updater_exe),
-                                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                if latest_version:
+                    v_latest = tuple(map(int, latest_version.split(".")))
+                    v_curr = tuple(map(int, CURRENT_VERSION.replace("v", "").split(".")))
+                    if v_latest > v_curr:
+                        atualizar = True if not manual else messagebox.askyesno(
+                            "Atualização Disponível",
+                            f"Uma nova versão ({latest_version}) foi encontrada!\nDeseja atualizar agora?\n\n"
+                            "O programa será fechado para concluir a instalação."
+                        )
+                        if atualizar:
+                            # Tenta localizar o updater em diferentes layouts de instalação
+                            candidatos = [
+                                os.path.normpath(os.path.join(base_proj_dir, "updater", "clube_updater.exe")),
+                                os.path.normpath(os.path.join(os.path.dirname(sys.executable), "updater", "clube_updater.exe")),
+                                os.path.normpath(os.path.join(base_proj_dir, "clube_updater.exe"))
+                            ]
+                            updater_exe = next((p for p in candidatos if os.path.exists(p)), None)
+                            
+                            if updater_exe:
+                                try:
+                                    subprocess.Popen(
+                                        [updater_exe],
+                                        cwd=os.path.dirname(updater_exe),
+                                        creationflags=subprocess.CREATE_NEW_CONSOLE
+                                    )
+                                    self.root.destroy()
+                                    sys.exit(0)
+                                except Exception as e:
+                                    logging.error(f"Erro ao executar updater: {e}")
+                                    messagebox.showerror("Erro de Execução", f"Não foi possível iniciar o atualizador.\n\nDetalhe: {e}")
+                            else:
+                                logging.error(f"Updater não encontrado. Caminhos testados: {candidatos}")
+                                messagebox.showerror(
+                                    "Componente Ausente",
+                                    "O arquivo de atualização não foi encontrado.\n\n"
+                                    f"Caminhos testados:\n- " + "\n- ".join(candidatos) + "\n\n"
+                                    "💡 SOLUÇÃO: Reinstale o programa para restaurar os componentes do sistema."
                                 )
-                                self.root.destroy()
-                                sys.exit(0)
-                            except Exception as e:
-                                logging.error(f"Erro ao executar updater: {e}")
-                                messagebox.showerror("Erro de Execução", f"Não foi possível iniciar o atualizador.\n\nDetalhe: {e}")
-                        else:
-                            logging.error(f"Updater não encontrado. Caminhos testados: {candidatos}")
-                            messagebox.showerror(
-                                "Componente Ausente",
-                                "O arquivo de atualização não foi encontrado.\n\n"
-                                f"Caminhos testados:\n- " + "\n- ".join(candidatos) + "\n\n"
-                                "💡 SOLUÇÃO: Reinstale o programa para restaurar os componentes do sistema."
-                            )
                 elif manual:
                     # Silenciado conforme pedido do usuário
                     pass

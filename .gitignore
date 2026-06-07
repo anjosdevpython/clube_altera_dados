@@ -41,3 +41,7 @@ crm_config.json
 github_token.txt
 data/
 logs/
+app/
+pw-browsers/
+dist/
+build/

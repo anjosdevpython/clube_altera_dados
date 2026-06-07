@@ -1,10 +1,10 @@
 ; Inno Setup Script para o Clube Altera Dados
 [Setup]
 AppName=Clube Altera Dados
-AppVersion=1.0.12
+AppVersion=1.0.13
 DefaultDirName={pf}\ClubeAlteraDados
 DefaultGroupName=Clube Altera Dados
-OutputBaseFilename=Instalador_Clube
+OutputBaseFilename=Instalador_Clube_v2
 Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64
@@ -17,9 +17,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Programa Principal (Na subpasta app)
-Source: "dist\CLUBE_modif\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\temp_build2\dist\CLUBE_modif\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Atualizador (Na subpasta updater)
-Source: "dist\clube_updater.exe"; DestDir: "{app}\updater"; Flags: ignoreversion
+Source: "C:\temp_build2\dist\clube_updater.exe"; DestDir: "{app}\updater"; Flags: ignoreversion
 ; Arquivo de Versão (Na raiz da instalação)
 Source: "version.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "clube_icon.ico"; DestDir: "{app}\app"; Flags: ignoreversion
