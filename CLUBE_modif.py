@@ -157,14 +157,15 @@ def tentar_seletores(page_obj, chave: str, acao: str, step: str = "", **kwargs):
     Parametros:
         page_obj: instancia de Page do Playwright (passa page global ou parametro).
         chave: chave em SELECTORS (ex: "crm_cpf_campo").
-        acao: 'fill' | 'click' | 'wait' | 'locator'.
+        acao: 'fill' | 'type' | 'click' | 'wait' | 'locator'.
         step: nome da etapa para mensagens de erro (ex: "busca_cpf").
         kwargs:
-            valor (str)    — para acao='fill'
+            valor (str)    — para acao='fill' ou 'type'
+            delay (int)    — ms entre teclas para 'type' (default: aleatorio 60-130ms)
             timeout (int)  — milissegundos, default 10000 para 'wait', 5000 para outros
 
     Retorna:
-        None para 'fill', 'click', 'wait'.
+        None para 'fill', 'type', 'click', 'wait'.
         Locator para 'locator'.
 
     Levanta:
@@ -181,6 +182,19 @@ def tentar_seletores(page_obj, chave: str, acao: str, step: str = "", **kwargs):
                 valor = kwargs.get("valor", "")
                 timeout = kwargs.get("timeout", 5000)
                 page_obj.locator(sel).fill(valor, timeout=timeout)
+                if i > 0:
+                    report_log(f"[SELETOR] '{chave}' usou fallback #{i}: {sel}", "info")
+                return None
+
+            elif acao == "type":
+                # Digita caractere a caractere com delay humanizado para evitar detecção
+                valor = kwargs.get("valor", "")
+                delay = kwargs.get("delay", random.randint(60, 130))
+                timeout = kwargs.get("timeout", 5000)
+                loc = page_obj.locator(sel)
+                loc.wait_for(state="visible", timeout=timeout)
+                loc.click()  # foca o campo antes de digitar
+                loc.type(valor, delay=delay)
                 if i > 0:
                     report_log(f"[SELETOR] '{chave}' usou fallback #{i}: {sel}", "info")
                 return None
@@ -363,14 +377,15 @@ def loguin_function_Zanthus():
         page.goto('https://minipreco.zanthus.bluesoft.com.br')
 
         report_log(f"Portal Zanthus carregado. Logando como {login_funcionario}...")
-        tentar_seletores(page, "zanthus_usuario", "fill", step="login_zanthus", valor=login_funcionario)
-        tentar_seletores(page, "zanthus_senha",   "fill", step="login_zanthus", valor=senha_funcionario)
+        # Usa 'type' (digitação humanizada) nos campos de login para evitar detecção de bot
+        tentar_seletores(page, "zanthus_usuario", "type", step="login_zanthus", valor=login_funcionario)
+        tentar_seletores(page, "zanthus_senha",   "type", step="login_zanthus", valor=senha_funcionario)
 
         report_log("Enviando formulario de login Zanthus...")
         tentar_seletores(page, "zanthus_submit", "click", step="login_zanthus")
 
         try:
-            tentar_seletores(page, "zanthus_menu", "wait", step="login_zanthus", timeout=10000)
+            tentar_seletores(page, "zanthus_menu", "wait", step="login_zanthus", timeout=15000)
             zanthus_confirmação = ['yes']
         except (PlaywrightTimeoutError, PlaywrightError):
             zanthus_confirmação = []
@@ -387,8 +402,59 @@ def loguin_function_Zanthus():
 def funcionais():
     global playwright_instance, browser, context, page
     playwright_instance = sync_playwright().start()
-    browser = playwright_instance.chromium.launch(headless=True)
-    context = browser.new_context(viewport={'width': 1920, 'height': 1080})
+
+    # ── Camada 1: args anti-detecção ─────────────────────────────────────────
+    # --disable-blink-features=AutomationControlled remove a flag "controlado por
+    # software automatizado" que anti-bots leem via JS.
+    browser = playwright_instance.chromium.launch(
+        headless=True,
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-extensions",
+            "--disable-plugins-discovery",
+            "--disable-infobars",
+        ]
+    )
+
+    # ── Camada 2: contexto com user-agent e locale reais ─────────────────────
+    # Resolução 1366×768 é a mais comum no Brasil — menos suspeita que 1920×1080.
+    # User-agent de Chrome real sem "HeadlessChrome" no token.
+    context = browser.new_context(
+        viewport={"width": 1366, "height": 768},
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        locale="pt-BR",
+        timezone_id="America/Sao_Paulo",
+    )
+
+    # ── Camada 3: script de evasão injetado em TODA página nova ──────────────
+    # Sobrescreve as propriedades que sistemas anti-bot leem via JavaScript.
+    context.add_init_script("""
+        // Remove a flag de webdriver — principal sinal detectado por reCAPTCHA e similares
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        // Simula presença de plugins como um browser real
+        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        // Idiomas esperados de um usuário brasileiro
+        Object.defineProperty(navigator, 'languages', { get: () => ['pt-BR', 'pt', 'en-US', 'en'] });
+        // Stub do objeto chrome — ausente em headless puro
+        if (!window.chrome) { window.chrome = { runtime: {} }; }
+        // Remove rastro de CDP (Chrome DevTools Protocol) no objeto permission
+        const originalQuery = window.navigator.permissions
+            ? window.navigator.permissions.query.bind(window.navigator.permissions)
+            : null;
+        if (originalQuery) {
+            window.navigator.permissions.query = (parameters) =>
+                parameters.name === 'notifications'
+                    ? Promise.resolve({ state: Notification.permission })
+                    : originalQuery(parameters);
+        }
+    """)
+
     page = context.new_page()
 
 def finalizar_playwright():
@@ -612,10 +678,11 @@ def loguin_function():
         report_log("Acessando CRM Mini Preco (Bnex)...")
         page.goto('https://crm.grupominipreco.com.br')
 
-        tentar_seletores(page, "crm_usuario",     "wait", step="login_crm", timeout=15000)
+        tentar_seletores(page, "crm_usuario", "wait", step="login_crm", timeout=15000)
         report_log("Realizando login no CRM...")
-        tentar_seletores(page, "crm_usuario",     "fill", step="login_crm", valor=crm_usuario)
-        tentar_seletores(page, "crm_senha_login", "fill", step="login_crm", valor=crm_senha)
+        # Usa 'type' (digitação humanizada) nos campos de login para evitar detecção de bot
+        tentar_seletores(page, "crm_usuario",     "type", step="login_crm", valor=crm_usuario)
+        tentar_seletores(page, "crm_senha_login", "type", step="login_crm", valor=crm_senha)
         tentar_seletores(page, "crm_btn_entrar",  "click", step="login_crm")
 
         page.wait_for_load_state("networkidle")
