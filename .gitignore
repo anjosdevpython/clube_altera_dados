@@ -45,3 +45,5 @@ app/
 pw-browsers/
 dist/
 build/
+
+upload_release.py

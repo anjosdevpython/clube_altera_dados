@@ -21,8 +21,7 @@ APP_EXE_NAME = "CLUBE_modif.exe"
 ZIP_PREFIX = "CLUBE_modif-"               
 
 if getattr(sys, 'frozen', False):
-    UPDATER_DIR = os.path.dirname(os.path.abspath(sys.executable))
-    BASE_DIR = os.path.dirname(UPDATER_DIR)
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
