@@ -39,6 +39,7 @@ MANIFEST
 # Secrets / Config externos (nunca comitar)
 crm_config.json
 github_token.txt
+crm_read_token.txt
 data/
 logs/
 app/

@@ -26,8 +26,12 @@ import urllib.error
 # ============================================================================
 # CONFIGURAÇÕES DE ATUALIZAÇÃO
 # ============================================================================
-CURRENT_VERSION = "v1.0.19"
+CURRENT_VERSION = "v1.0.20"
 GITHUB_REPO = "anjosdevpython/clube_altera_dados"
+# Repositório PRIVADO que guarda as credenciais do CRM (puxadas remotamente no login).
+# Operadores nunca veem usuario/senha; a config fica centralizada num lugar só.
+CRM_CONFIG_REPO = "anjosdevpython/clube_credenciais"
+CRM_CONFIG_FILE = "crm_config.json"
 
 if getattr(sys, 'frozen', False):
     # No PyInstaller 6+, arquivos extras podem estar em MEIPASS ou no _internal
@@ -648,8 +652,99 @@ def _enviar_log_auditoria(tipo_operacao, resultado, mensagem_erro=None):
     threading.Thread(target=_post, daemon=True).start()
 
 
+def _ler_token_leitura():
+    """Lê o token somente-leitura (embutido no .exe, nunca versionado) usado para
+    puxar as credenciais do repositório privado. Retorna a string do token ou None."""
+    meipass = getattr(sys, '_MEIPASS', None)
+    candidatos = []
+    if meipass:
+        candidatos.append(os.path.join(meipass, "crm_read_token.txt"))
+        candidatos.append(os.path.join(meipass, "_internal", "crm_read_token.txt"))
+    candidatos.append(os.path.join(base_proj_dir, "crm_read_token.txt"))
+    candidatos.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "crm_read_token.txt"))
+    for c in candidatos:
+        try:
+            if os.path.exists(c):
+                t = open(c, "r", encoding="utf-8").read().strip()
+                if t:
+                    return t
+        except Exception:
+            pass
+    return None
+
+
+def _cache_crm_path():
+    return os.path.join(caminho_dados, "crm_cache.bin")
+
+
+def _salvar_cache_crm(usuario, senha):
+    """Grava as credenciais em cache criptografado (Fernet atrelado à máquina)."""
+    try:
+        cipher = get_cipher()
+        blob = json.dumps({"usuario": usuario, "senha": senha}).encode("utf-8")
+        with open(_cache_crm_path(), "wb") as f:
+            f.write(cipher.encrypt(blob))
+    except Exception as e:
+        logging.error(f"Erro ao salvar cache CRM: {e}")
+
+
+def _ler_cache_crm():
+    """Lê o cache criptografado (uso offline). Retorna (usuario, senha) ou None."""
+    try:
+        caminho = _cache_crm_path()
+        if not os.path.exists(caminho):
+            return None
+        cipher = get_cipher()
+        with open(caminho, "rb") as f:
+            dados = json.loads(cipher.decrypt(f.read()).decode("utf-8"))
+        u, s = dados.get("usuario", ""), dados.get("senha", "")
+        return (u, s) if u and s else None
+    except Exception as e:
+        logging.error(f"Erro ao ler cache CRM: {e}")
+        return None
+
+
+def _puxar_crm_config_remoto():
+    """Puxa {usuario, senha} do repositório PRIVADO central. Retorna tupla ou None."""
+    token = _ler_token_leitura()
+    if not token:
+        logging.warning("Token de leitura ausente; pulando pull remoto de credenciais.")
+        return None
+    try:
+        url = f"https://api.github.com/repos/{CRM_CONFIG_REPO}/contents/{CRM_CONFIG_FILE}"
+        req = urllib.request.Request(url, headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.raw+json",
+            "User-Agent": "clube-altera-dados",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            cfg = json.loads(resp.read().decode("utf-8"))
+        u, s = cfg.get("usuario", "").strip(), cfg.get("senha", "").strip()
+        if u and s:
+            return (u, s)
+        logging.error("crm_config remoto sem usuario/senha preenchidos.")
+        return None
+    except Exception as e:
+        logging.warning(f"Falha ao puxar credenciais remotas (tentando cache/local): {e}")
+        return None
+
+
 def _carregar_crm_config():
-    """Carrega credenciais do CRM de crm_config.json (nunca hardcoded no código)."""
+    """Obtém as credenciais do CRM de forma centralizada:
+    1) puxa do repositório privado (fonte da verdade),
+    2) cai no cache criptografado local (offline),
+    3) por fim, arquivo crm_config.json local (compatibilidade)."""
+    remoto = _puxar_crm_config_remoto()
+    if remoto:
+        _salvar_cache_crm(*remoto)
+        return remoto
+
+    cache = _ler_cache_crm()
+    if cache:
+        logging.info("Usando credenciais do CRM do cache local (modo offline).")
+        return cache
+
+    # Fallback legado: arquivo crm_config.json presente localmente
     candidatos = [
         os.path.join(base_proj_dir, "crm_config.json"),
         os.path.join(os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__)), "crm_config.json"),
@@ -660,14 +755,19 @@ def _carregar_crm_config():
             try:
                 with open(caminho, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
-                    return cfg.get("usuario", ""), cfg.get("senha", "")
+                    u, s = cfg.get("usuario", ""), cfg.get("senha", "")
+                    if u and s:
+                        _salvar_cache_crm(u, s)
+                    return u, s
             except Exception as e:
                 logging.error(f"Erro ao ler crm_config.json em {caminho}: {e}")
-    logging.error("crm_config.json não encontrado. Crie o arquivo com {\"usuario\": \"...\", \"senha\": \"...\"}")
+
+    logging.error("Não foi possível obter credenciais do CRM (remoto, cache e local falharam).")
     raise FileNotFoundError(
-        "Arquivo crm_config.json não encontrado.\n"
-        f"Crie-o em: {candidatos[0]}\n"
-        "Conteúdo esperado: {\"usuario\": \"LOGIN\", \"senha\": \"SENHA\"}"
+        "Não foi possível obter as credenciais do CRM.\n"
+        "O aplicativo puxa as credenciais de um repositório central; "
+        "verifique a conexão com a internet e tente novamente.\n"
+        "Se o problema persistir, contate o desenvolvedor."
     )
 
 def loguin_function():

@@ -1,7 +1,7 @@
 ; Inno Setup Script para o Clube Altera Dados
 [Setup]
 AppName=Clube Altera Dados
-AppVersion=1.0.19
+AppVersion=1.0.20
 DefaultDirName={pf}\ClubeAlteraDados
 DefaultGroupName=Clube Altera Dados
 OutputBaseFilename=Instalador_Clube_v2

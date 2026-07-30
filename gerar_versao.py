@@ -139,7 +139,7 @@ class AutoBuildApp:
             self.log("\n--- FASE 2: COMPILANDO APP PRINCIPAL (PyInstaller) ---")
             self.log("Isso pode demorar alguns minutos...")
             python_exe = sys.executable
-            cmd_app = f'"{python_exe}" -m PyInstaller --noconfirm --onedir -w --icon="clube_icon.ico" --add-data "clube_icon.ico;." --add-data "pw-browsers;pw-browsers" --name "CLUBE_modif" "{MAIN_FILE}"'
+            cmd_app = f'"{python_exe}" -m PyInstaller --noconfirm --onedir -w --icon="clube_icon.ico" --add-data "clube_icon.ico;." --add-data "crm_read_token.txt;." --add-data "pw-browsers;pw-browsers" --name "CLUBE_modif" "{MAIN_FILE}"'
             result = subprocess.run(cmd_app, shell=True, capture_output=True, text=True)
             if result.returncode != 0:
                 self.log(f"❌ Erro no PyInstaller App: {result.stderr}")
