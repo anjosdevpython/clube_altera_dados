@@ -26,7 +26,7 @@ import urllib.error
 # ============================================================================
 # CONFIGURAÇÕES DE ATUALIZAÇÃO
 # ============================================================================
-CURRENT_VERSION = "v1.0.14"
+CURRENT_VERSION = "v1.0.19"
 GITHUB_REPO = "anjosdevpython/clube_altera_dados"
 
 if getattr(sys, 'frozen', False):
