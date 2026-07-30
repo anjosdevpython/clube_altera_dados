@@ -676,7 +676,7 @@ def loguin_function():
         crm_usuario, crm_senha = _carregar_crm_config()
         funcionais()
         report_log("Acessando CRM Mini Preco (Bnex)...")
-        page.goto('https://crm.grupominipreco.com.br')
+        page.goto('https://painel-minipreco.bnex.com.br:5510/Login?ReturnUrl=%2F')
 
         tentar_seletores(page, "crm_usuario", "wait", step="login_crm", timeout=15000)
         report_log("Realizando login no CRM...")
@@ -697,7 +697,7 @@ def loguin_function():
         report_log("Navegando para pagina de Clientes...")
         for tentativa in range(3):
             try:
-                page.goto('https://crm.grupominipreco.com.br/Cliente/', timeout=15000)
+                page.goto('https://painel-minipreco.bnex.com.br:5510/Cliente', timeout=15000)
                 break
             except Exception as e:
                 if "ERR_ABORTED" in str(e):
@@ -706,7 +706,7 @@ def loguin_function():
                 else:
                     raise
         else:
-            page.goto('https://crm.grupominipreco.com.br/Cliente/')
+            page.goto('https://painel-minipreco.bnex.com.br:5510/Cliente')
                 
         tentar_seletores(page, "crm_cpf_campo", "wait", step="login_crm", timeout=30000)
     except Exception as e:
