@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-from flask import Flask, request, jsonify, send_from_module_directory
+from flask import Flask, request, jsonify, send_from_directory
 
 # Ajustar caminho base
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +16,7 @@ app = Flask(__name__, static_folder=public_dir, static_url_path="")
 
 @app.route('/')
 def index():
-    return send_from_module_directory(public_dir, 'index.html')
+    return send_from_directory(public_dir, 'index.html')
 
 @app.route('/api/health', methods=['GET'])
 def health():
